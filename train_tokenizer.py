@@ -172,7 +172,7 @@ if __name__ == "__main__":
         
     # pre-tokenize
     logger.info('Pre-tokenizing...')
-    if args.num_files > 1:
+    if args.num_files == 1:
         input_plib_file = pathlib.Path(args.input_file)
         pretokenized_plib_file = input_plib_file.parent.joinpath(input_plib_file.stem + args.pretokenized_prefix + '.txt')
         mp_tokenize(str(input_plib_file), str(pretokenized_plib_file), args.mecab_dic_type, args.mecab_option, 0)
