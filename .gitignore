@@ -132,4 +132,7 @@ dmypy.json
 .venv/
 .direnv/
 .envrc
+data/
+model/
 runs/
+.parameter.json

@@ -1,0 +1,126 @@
+{
+    "bert-small" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 256,
+        "sequence-length" : 128,
+        "intermediate-size" : 1024,
+        "attention-heads" : 4,
+        "embedding-size" : 128,
+        "warmup-steps" : 10000,
+        "learning-rate" : 1e-4,
+        "batch-size" : {
+            "-1" : 128
+        },
+        "train-steps" : 1450000
+    },
+    "bert-base" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "intermediate-size" : 3072,
+        "attention-heads" : 12,
+        "embedding-size" : 768,
+        "warmup-steps" : 10000,
+        "learning-rate" : 1e-4,
+        "batch-size" : {
+            "-1" : 256
+        },
+        "train-steps" : 1000000
+    },
+    "bert-large" : {
+        "number-of-layers" : 24,
+        "hidden-size" : 1024,
+        "sequence-length" : 512,
+        "intermediate-size" : 4096,
+        "attention-heads" : 16,
+        "embedding-size" : 1024,
+        "warmup-steps" : 10000,
+        "learning-rate" : 1e-4,
+        "batch-size" : {
+            "-1" : 256
+        },
+        "train-steps" : 464000
+    },
+    "electra-small" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 256,
+        "sequence-length" : 128,
+        "ffn-inner-hidden-size" : 1024,
+        "attention-heads" : 4,
+        "embedding-size" : 128,
+        "generator-size" : "1/4",
+        "mask-percent" : 15,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "-1" : 128
+        },
+        "train-steps" : 1000000
+    },
+    "electra-base" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 3072,
+        "attention-heads" : 12,
+        "embedding-size" : 768,
+        "generator-size" : "1/3",
+        "mask-percent" : 15,
+        "warmup-steps" : 10000,
+        "learning-rate" : 2e-4,
+        "batch-size" : {
+            "-1" : 256
+        },
+        "train-steps" : 766000
+    },
+    "electra-large" : {
+        "number-of-layers" : 24,
+        "hidden-size" : 1024,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 4096,
+        "attention-heads" : 16,
+        "embedding-size" : 1024,
+        "generator-size" : "1/4",
+        "mask-percent" : 25,
+        "warmup-steps" : 10000,
+        "learning-rate" : 2e-4,
+        "batch-size" : {
+            "-1" : 2048
+        },
+        "train-steps" : 400000
+    },
+    "bert-base-suzuki" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "intermediate-size" : 3072,
+        "attention-heads" : 12,
+        "embedding-size" : 768,
+        "warmup-steps" : 10000,
+        "learning-rate" : 1e-4,
+        "batch-size" : {
+            "0" : 96,
+            "1" : 96,
+            "2" : 64
+        },
+        "train-steps" : 1000000
+    },
+    "electra-base-suzuki" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 3072,
+        "attention-heads" : 12,
+        "embedding-size" : 768,
+        "generator-size" : "1/3",
+        "mask-percent" : 15,
+        "warmup-steps" : 10000,
+        "learning-rate" : 2e-4,
+        "batch-size" : {
+            "0" : 96,
+            "1" : 96,
+            "2" : 64
+        },
+        "train-steps" : 766000
+    }
+}
