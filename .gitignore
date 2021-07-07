@@ -135,4 +135,5 @@ dmypy.json
 data/
 model/
 runs/
+share/
 .parameter.json
