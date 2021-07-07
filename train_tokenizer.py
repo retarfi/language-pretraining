@@ -120,7 +120,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_files', type=int, default=1)
     # pre-tokenize option
     parser.add_argument('--pretokenized_prefix', type=str, default='_pretokenized')
-    parser.add_argument('--mecab_dic_type', type=str, default='')
+    parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
     parser.add_argument('--mecab_option', type=str, default='')
     # train tokenize option
     parser.add_argument('--tokenizer_type', required=True, type=str, choices=['sentencepiece', 'wordpiece'])
