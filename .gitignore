@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Author added
+.venv/
+.direnv/
+.envrc
+runs/
