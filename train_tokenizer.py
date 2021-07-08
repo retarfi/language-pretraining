@@ -4,6 +4,7 @@ MeCabでPre-tokenizeしたのちsubword用にtokenizerをtrainする。
 '''
 import argparse
 import logging
+import multiprocessing as mp
 import os
 import pathlib
 import subprocess
@@ -124,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument('--mecab_option', type=str, default='')
     # train tokenize option
     parser.add_argument('--tokenizer_type', required=True, type=str, choices=['sentencepiece', 'wordpiece'])
-    parser.add_argument('--vocab_size', type=int, default=30522)
+    parser.add_argument('--vocab_size', type=int, default=32000)
     parser.add_argument('--min_frequency', type=int, default=2)
     args = parser.parse_args()
     if '.txt' not in args.input_file:
@@ -167,8 +168,8 @@ if __name__ == "__main__":
                     f.write(line)
                     cnt_line += 1
             f.close()
-            pbar.update(1)
-            pbar.close()
+            # pbar.update(1)
+            # pbar.close()
         
     # pre-tokenize
     logger.info('Pre-tokenizing...')
@@ -191,10 +192,10 @@ if __name__ == "__main__":
        
 
     # train tokenizer
-    input_file_or_dir = str(pretokenize_plib_dir) if args.num_files > 1 else str(pretokenized_plib_file)
+    input_file_or_dir = str(pretokenized_plib_dir) if args.num_files > 1 else str(pretokenized_plib_file)
     train_tokenizer(
         input_file_or_dir = input_file_or_dir,
-        output_dir = args.output_dir,
+        output_dir = args.model_dir,
         vocab_size = args.vocab_size,
         min_frequency = args.min_frequency,
         tokenizer_type = args.tokenizer_type,
