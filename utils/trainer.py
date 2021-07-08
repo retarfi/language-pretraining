@@ -59,6 +59,10 @@ INTEGRATION_TO_CALLBACK = {
 
 
 class MyTrainer(Trainer):
+    def __init__(self, node_rank, **kwargs):
+        super().__init__(**kwargs)
+        self.node_rank = node_rank
+
     # override class of Trainer
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if not isinstance(self.train_dataset, collections.abc.Sized):
@@ -97,6 +101,7 @@ class MyTrainer(Trainer):
                     self.args.train_batch_size,
                     real_batch_size=self.real_batch_size,
                     batch_config=self.batch_config,
+                    node_rank=self.node_rank,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
@@ -130,6 +135,7 @@ class MyTrainer(Trainer):
                     self.args.train_batch_size,
                     real_batch_size=self.real_batch_size,
                     batch_config = self.batch_config,
+                    node_rank=self.node_rank,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     seed=self.args.seed,

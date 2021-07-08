@@ -94,7 +94,7 @@ def make_dataset_model_bert(
     dataset = utils.TextDatasetForNextSentencePrediction(
         tokenizer = tokenizer, 
         file_path = input_file, 
-        overwrite_cache= True,
+        overwrite_cache= False,
         block_size = param_config['sequence-length'],
         short_seq_probability = 0.1, # default
         nsp_probability = 0.5, # default
@@ -147,16 +147,19 @@ def make_dataset_model_electra(
 
 
 def run_pretraining(
-    tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase, 
-    input_file:str,
-    model_name:str,
-    model_dir:str,
-    param_config:dict,
-    do_whole_word_mask:bool,
-    do_continue:bool,
-    local_rank:int,
-) -> None:
-    yymmdd = dt.datetime.now().strftime("%y%m%d")
+        tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase, 
+        input_file:str,
+        model_name:str,
+        model_dir:str,
+        param_config:dict,
+        do_whole_word_mask:bool,
+        do_continue:bool,
+        node_rank:int,
+        local_rank:int,
+        run_name:str
+    ) -> None:
+    if run_name == '':
+        run_name = dt.datetime.now().strftime("%y%m%d") + "_" + os.path.basename(os.path.dirname(model_dir))
     os.makedirs(model_dir, exist_ok=True)
 
     # training argument
@@ -178,7 +181,7 @@ def run_pretraining(
         adam_beta2 = 0.999, # same as BERT paper
         weight_decay = 0.01, # same as BERT paper
         warmup_steps = param_config['warmup-steps'], 
-        logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{yymmdd}_{model_name}"),
+        logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
         save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 10000, #default:500
         save_strategy = "steps", # default:"steps"
         logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 1000, # default:500
@@ -195,7 +198,7 @@ def run_pretraining(
     )
     if not do_continue:
         if local_rank != -1:
-            training_args.per_device_train_batch_size = int(param_config['batch-size'][str(training_args.process_index)] / torch.cuda.device_count())
+            training_args.per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
         torch.save(training_args, os.path.join(model_dir, "training_args.bin"))
 
     # dataset and model
@@ -229,6 +232,7 @@ def run_pretraining(
         args = training_args,
         data_collator = data_collator,
         train_dataset = train_dataset,
+        node_rank = node_rank
     )
     trainer.batch_config = param_config['batch-size']
     trainer.real_batch_size = sum(param_config['batch-size'].values())
@@ -248,8 +252,10 @@ if __name__ == "__main__":
     parser.add_argument('--model_type', type=str, required=True)
     parser.add_argument('--tokenizer_type', type=str, choices=['sentencepiece', 'wordpiece'])
     parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
+    parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
+    parser.add_argument('--node_rank', type=int, default=1)
     parser.add_argument('--local_rank', type=int, default=-1)
 
     args = parser.parse_args()
@@ -304,5 +310,7 @@ if __name__ == "__main__":
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
+        node_rank = args.node_rank,
         local_rank = args.local_rank,
+        run_name = args.run_name
     )

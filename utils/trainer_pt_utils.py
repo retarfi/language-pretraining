@@ -53,9 +53,13 @@ def get_length_grouped_indices(
     return [i for megabatch in megabatches for i in megabatch]
 
 
-def get_indices_per_process(indices:List, batch_config:Dict, real_batch_size:int, rank:int, num_batch:int) -> List:
-    batch_size = batch_config[str(rank)]
-    num_before = sum([batch_config[str(i)] for i in range(rank)])
+def get_indices_per_process(
+        indices:List, batch_size:int, 
+        batch_config:Dict, real_batch_size:int, 
+        node_rank:int, num_batch:int, 
+        rank:int, nproc_per_node:int
+    ) -> List:
+    num_before = sum([batch_config[str(i)] for i in range(node_rank)]) + batch_size * (rank - node_rank * nproc_per_node)
     num_after = num_before + batch_size
     base_idx = np.arange(num_before, num_after)
     expand_idx = np.array([base_idx + i for i in range(num_batch)]).reshape(batch_size*num_batch)
@@ -76,8 +80,9 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         batch_size: int,
         real_batch_size:int,
         batch_config: dict,
+        node_rank: int,
         num_replicas: Optional[int] = None,
-        rank: Optional[int] = None,
+        rank: int = 0,
         seed: int = 0,
         drop_last: bool = False,
         lengths: Optional[List[int]] = None,
@@ -98,9 +103,11 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         self.num_replicas = num_replicas
         if len(self.batch_config.keys()) != self.num_replicas:
             raise ValueError(f'There should be {len(self.batch_config.keys())} batch-size in parameter file, but got {self.num_replicas}')
+        self.node_rank = node_rank
         self.rank = rank
         self.epoch = 0
         self.drop_last = drop_last
+        self.nproc_per_node = int(batch_config[str(self.node_rank)] / self.batch_size)
         # If the dataset length is evenly divisible by # of replicas, then there
         # is no need to drop any data, since the dataset will be split equally.
         if self.drop_last and len(self.dataset) % self.real_batch_size != 0:
@@ -149,7 +156,12 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         CONSIDER UNBALANCE BATCH
         '''
         # indices = indices[self.rank : self.total_size : self.num_replicas]
-        indices = get_indices_per_process(indices=indices, batch_config=self.batch_config, real_batch_size=self.real_batch_size, rank=self.rank, num_batch=self.num_batch_samples)
+        indices = get_indices_per_process(
+            indices=indices, batch_size=self.batch_size,
+            batch_config=self.batch_config, real_batch_size=self.real_batch_size,
+            node_rank=self.node_rank, num_batch=self.num_batch_samples,
+            rank=self.rank, nproc_per_node=self.nproc_per_node
+        )
         assert len(indices) == self.num_samples
 
         return iter(indices)
@@ -158,7 +170,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 # Override PyTorch class DistributedSampler
 class MyDistributedSampler(DistributedSampler):
     def __init__(self, dataset: Dataset, batch_size: int, real_batch_size:int, 
-                 batch_config: dict, num_replicas: Optional[int] = None,
+                 batch_config: dict, node_rank: int,
+                 num_replicas: Optional[int] = None,
                  rank: Optional[int] = None, shuffle: bool = True,
                  seed: int = 0, drop_last: bool = False) -> None:
         if num_replicas is None:
@@ -178,9 +191,11 @@ class MyDistributedSampler(DistributedSampler):
         self.batch_size = batch_size
         self.batch_config = batch_config
         self.num_replicas = num_replicas
+        self.node_rank = node_rank
         self.rank = rank
         self.epoch = 0
         self.drop_last = drop_last
+        self.nproc_per_node = int(batch_config[str(self.node_rank)] / self.batch_size)
         # If the dataset length is evenly divisible by # of replicas, then there
         # is no need to drop any data, since the dataset will be split equally.
         if self.drop_last and len(self.dataset) % self.real_batch_size != 0:
@@ -229,7 +244,12 @@ class MyDistributedSampler(DistributedSampler):
         CONSIDER UNBALANCE BATCH
         '''
         # indices = indices[self.rank:self.total_size:self.num_replicas]
-        indices = get_indices_per_process(indices=indices, batch_config=self.batch_config, real_batch_size=self.real_batch_size, rank=self.rank, num_batch=self.num_batch_samples)
+        indices = get_indices_per_process(
+            indices=indices, batch_size=self.batch_size,
+            batch_config=self.batch_config, real_batch_size=self.real_batch_size,
+            node_rank=self.node_rank, num_batch=self.num_batch_samples,
+            rank=self.rank, nproc_per_node=self.nproc_per_node
+        )
         assert len(indices) == self.num_samples, f'{len(indices)} != {self.num_samples}'
 
         return iter(indices)
