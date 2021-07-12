@@ -1,11 +1,12 @@
 import torch
-import torch.nn as nn
+from torch import nn
+import torch.nn.functional as F
 from transformers import (
     ElectraConfig, 
     ElectraForMaskedLM, 
     PreTrainedModel,
     ElectraForPreTraining, 
-    PreTrainedModel,
+    ElectraPreTrainedModel,
     Trainer
 )
 from transformers.models.electra.modeling_electra import ElectraForPreTrainingOutput
@@ -13,12 +14,13 @@ from transformers.models.electra.modeling_electra import ElectraForPreTrainingOu
 class ElectraForPretrainingModel(PreTrainedModel):
     def __init__(self, config_generator, config_discriminator, loss_weights=(1,50)):
         super().__init__(config_discriminator)
+
         self.generator = ElectraForMaskedLM(config_generator)
         self.discriminator = ElectraForPreTraining(config_discriminator)
         # weight sharing
         self.discriminator.electra.embeddings = self.generator.electra.embeddings
         self.generator.generator_lm_head.weight = self.generator.electra.embeddings.word_embeddings.weight
-        # self.init_weights()
+        self.init_weights()
         self.loss_weights = loss_weights
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
@@ -39,35 +41,34 @@ class ElectraForPretrainingModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def forward(
-        self, 
-        input_ids=None, attention_mask=None, token_type_ids=None, 
-        position_ids=None, head_mask=None, inputs_embeds=None, 
-        labels=None, output_attentions=None, 
-        output_hidden_states=None, return_dict=None
-    
-    ):
-        outputs_gen = self.generator(
-            input_ids=input_ids, attention_mask=None, token_type_ids=token_type_ids, 
-            position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, 
-            labels=labels, output_attentions=output_attentions, 
-            output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
-        # return: (loss, logits, hidden_states, attentions)
-        # >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
-        # >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
-        # >>> outputs = model(**inputs, labels=labels)
+            self, 
+            input_ids, labels, attention_mask=None, token_type_ids=None, 
+            position_ids=None, head_mask=None, inputs_embeds=None, 
+            output_attentions=None, 
+            output_hidden_states=None, return_dict=None
+        ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        loss_gen = outputs_gen.loss # shape: (1,)
-        if labels is not None:
-            # Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-            logits_gen = outputs_gen.logits # shape: (batch_size, sequence_length, config.vocab_size)
-            predict_ids = torch.argmax(logits_gen, dim=2) + 1
-            labels_disc = (predict_ids != labels).to(torch.long)
-        else:
-            labels_disc = None
+        outputs_gen = self.generator(
+            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, 
+            position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, 
+            labels=labels, output_attentions=False, 
+            output_hidden_states=False, return_dict=True
+        )
+
+        loss_gen = outputs_gen.loss # (1,)
+        logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
+        masked_bool = (labels == -100)
+        # logits_masked: (batch_size*masked_length, config.vocab_size)
+        logits_masked = F.softmax(logits_gen[masked_bool].view(-1, self.discriminator.electra.config.vocab_size), dim=1)
+        # replaced tokens are set with logits
+        tokens_replaced = logits_masked.multinomial(num_samples=1, replacement=True).view(-1)
+        input_ids_disc = labels.clone()
+        input_ids_disc[masked_bool] = tokens_replaced
+        labels_disc = (input_ids_disc != labels).to(torch.long)
 
         outputs_disc = self.discriminator(
-            input_ids=predict_ids, attention_mask=None, token_type_ids=token_type_ids, 
+            input_ids=input_ids_disc, attention_mask=attention_mask, token_type_ids=token_type_ids, 
             position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, 
             labels=labels_disc, output_attentions=output_attentions, 
             output_hidden_states=output_hidden_states, return_dict=return_dict
@@ -77,12 +78,13 @@ class ElectraForPretrainingModel(PreTrainedModel):
         # - 0 indicates the token is an original token,
         # - 1 indicates the token was replaced.
 
-        if labels is not None:
-            loss_disc = outputs_disc.loss
+        if not return_dict:
+            loss_disc = outputs_disc[0]
             total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
-        else:
-            total_loss = None
+            return ((total_loss,) + outputs_disc) if total_loss is not None else outputs_disc
 
+        loss_disc = outputs_disc.loss
+        total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
         return ElectraForPreTrainingOutput(
             loss=total_loss,
             logits=outputs_disc.logits,
