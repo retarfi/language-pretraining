@@ -185,7 +185,7 @@ def run_pretraining(
         save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 10000, #default:500
         save_strategy = "steps", # default:"steps"
         logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 1000, # default:500
-        save_total_limit = 10, # optional
+        save_total_limit = 20, # optional
         seed = 42, # default
         fp16 =  True,
         fp16_opt_level = "O2", #:Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
