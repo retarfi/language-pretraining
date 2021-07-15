@@ -22,6 +22,15 @@ class ElectraForPretrainingModel(PreTrainedModel):
         self.generator.generator_lm_head.weight = self.generator.electra.embeddings.word_embeddings.weight
         self.init_weights()
         self.loss_weights = loss_weights
+        self.gumbel_dist = torch.distributions.gumbel.Gumbel(0.,1.)
+    
+    def to(self, *args, **kwargs):
+        "Also set dtype and device of contained gumbel distribution if needed"
+        return_object = super().to(*args, **kwargs)
+        device, dtype = self.generator.device, torch.float32
+        self.gumbel_dist = torch.distributions.gumbel.Gumbel(torch.tensor(0., device=device, dtype=dtype), torch.tensor(1., device=device, dtype=dtype))
+        return return_object
+
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -58,14 +67,18 @@ class ElectraForPretrainingModel(PreTrainedModel):
 
         loss_gen = outputs_gen.loss # (1,)
         logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
-        masked_bool = (labels == -100)
-        # logits_masked: (batch_size*masked_length, config.vocab_size)
-        logits_masked = F.softmax(logits_gen[masked_bool].view(-1, self.discriminator.electra.config.vocab_size), dim=1)
-        # replaced tokens are set with logits
-        tokens_replaced = logits_masked.multinomial(num_samples=1, replacement=True).view(-1)
-        input_ids_disc = labels.clone()
-        input_ids_disc[masked_bool] = tokens_replaced
-        labels_disc = (input_ids_disc != labels).to(torch.long)
+        with torch.no_grad():
+            masked_bool = (labels == -100)
+            # logits_masked: (batch_size*masked_length, config.vocab_size)
+            # logits_masked = F.softmax(logits_gen[masked_bool].reshape(-1, self.discriminator.electra.config.vocab_size), dim=1)
+            # replaced tokens are set with logits
+            # tokens_replaced = logits_masked.multinomial(num_samples=1, replacement=True).reshape(-1)
+            logits = logits_gen[masked_bool]#.reshape(-1, self.discriminator.electra.config.vocab_size)
+            gumbel = self.gumbel_dist.sample(logits.shape)#.to(logits.device)
+            tokens_replaced = (logits + gumbel).argmax(dim=-1)
+            input_ids_disc = labels.clone()
+            input_ids_disc[masked_bool] = tokens_replaced
+            labels_disc = (input_ids_disc != labels)#.to(torch.long)
 
         outputs_disc = self.discriminator(
             input_ids=input_ids_disc, attention_mask=attention_mask, token_type_ids=token_type_ids, 
