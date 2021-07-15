@@ -11,6 +11,7 @@ from transformers.integrations import (
     rewrite_logs
 )
 from transformers.trainer import *
+from transformers import __version__
 
 
 # Override

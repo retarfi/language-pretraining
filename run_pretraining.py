@@ -167,8 +167,10 @@ def run_pretraining(
         training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
         per_device_train_batch_size = training_args.per_device_train_batch_size
     else:
-        # os.makedirs(os.path.join(os.path.dirname(__file__), f"runs/{yymmdd}"), exist_ok=True)
-        per_device_train_batch_size = int(param_config['batch-size'][str(local_rank)] / torch.cuda.device_count())
+        if torch.cuda.device_count() > 0:
+            per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
+        else:
+            per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
     # initialize
     training_args = transformers.TrainingArguments(
         output_dir = model_dir,
@@ -187,7 +189,7 @@ def run_pretraining(
         logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 1000, # default:500
         save_total_limit = 20, # optional
         seed = 42, # default
-        fp16 =  True,
+        fp16 = bool(torch.cuda.device_count()>0),
         fp16_opt_level = "O2", #:Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
@@ -198,7 +200,10 @@ def run_pretraining(
     )
     if not do_continue:
         if local_rank != -1:
-            training_args.per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
+            if torch.cuda.device_count() > 0:
+                training_args.per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
+            else:
+                training_args.per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
         torch.save(training_args, os.path.join(model_dir, "training_args.bin"))
 
     # dataset and model
@@ -255,7 +260,7 @@ if __name__ == "__main__":
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
-    parser.add_argument('--node_rank', type=int, default=1)
+    parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
 
     args = parser.parse_args()
