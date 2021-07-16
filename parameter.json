@@ -3,9 +3,8 @@
         "number-of-layers" : 12,
         "hidden-size" : 256,
         "sequence-length" : 128,
-        "intermediate-size" : 1024,
+        "ffn-inner-hidden-size" : 1024,
         "attention-heads" : 4,
-        "embedding-size" : 128,
         "warmup-steps" : 10000,
         "learning-rate" : 1e-4,
         "batch-size" : {
@@ -17,9 +16,8 @@
         "number-of-layers" : 12,
         "hidden-size" : 768,
         "sequence-length" : 512,
-        "intermediate-size" : 3072,
+        "ffn-inner-hidden-size" : 3072,
         "attention-heads" : 12,
-        "embedding-size" : 768,
         "warmup-steps" : 10000,
         "learning-rate" : 1e-4,
         "batch-size" : {
@@ -31,9 +29,8 @@
         "number-of-layers" : 24,
         "hidden-size" : 1024,
         "sequence-length" : 512,
-        "intermediate-size" : 4096,
+        "ffn-inner-hidden-size" : 4096,
         "attention-heads" : 16,
-        "embedding-size" : 1024,
         "warmup-steps" : 10000,
         "learning-rate" : 1e-4,
         "batch-size" : {
@@ -93,9 +90,8 @@
         "number-of-layers" : 12,
         "hidden-size" : 768,
         "sequence-length" : 512,
-        "intermediate-size" : 3072,
+        "ffn-inner-hidden-size" : 3072,
         "attention-heads" : 12,
-        "embedding-size" : 768,
         "warmup-steps" : 10000,
         "learning-rate" : 1e-4,
         "batch-size" : {

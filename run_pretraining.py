@@ -102,7 +102,9 @@ def make_dataset_model_bert(
     bert_config = BertConfig(
         vocab_size = tokenizer.vocab_size, 
         hidden_size = param_config['hidden-size'], 
+        num_hidden_layers = param_config['number-of-layers'],
         num_attention_heads = param_config['attention-heads'],
+        intermediate_size = param_config['ffn-inner-hidden-size'],
         max_position_embeddings = param_config['sequence-length'],
     )
     model = BertForPreTraining(config=bert_config)
@@ -291,9 +293,11 @@ if __name__ == "__main__":
         raise ValueError('Argument model_type must contain electra or bert')
     param_config = param_config[args.model_type]
     set_assert = {
-        'number-of-layers', 'hidden-size', 'sequence-length', 'intermediate-size', 'attention-heads',
-        'embedding-size', 'warmup-steps', 'learning-rate', 'batch-size', 'train-steps'
+        'number-of-layers', 'hidden-size', 'sequence-length', 'ffn-inner-hidden-size', 'attention-heads',
+        'warmup-steps', 'learning-rate', 'batch-size', 'train-steps'
     }
+    if model_name == 'electra':
+        set_assert = set_assert | set(['embedding-size', 'generator-size', 'mask-percent'])
     if param_config.keys() < set_assert:
         raise ValueError(f'{set_assert-param_config.keys()} is(are) not in parameter_file')
     if str(args.local_rank) not in param_config['batch-size'].keys():
