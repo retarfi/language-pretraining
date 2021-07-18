@@ -68,7 +68,7 @@ class ElectraForPretrainingModel(PreTrainedModel):
         loss_gen = outputs_gen.loss # (1,)
         logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
         with torch.no_grad():
-            masked_bool = (labels == -100)
+            masked_bool = (labels != -100)
             # logits_masked: (batch_size*masked_length, config.vocab_size)
             # logits_masked = F.softmax(logits_gen[masked_bool].reshape(-1, self.discriminator.electra.config.vocab_size), dim=1)
             # replaced tokens are set with logits
