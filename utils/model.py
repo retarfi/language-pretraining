@@ -69,16 +69,15 @@ class ElectraForPretrainingModel(PreTrainedModel):
         logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
         with torch.no_grad():
             masked_bool = (labels != -100)
-            # logits_masked: (batch_size*masked_length, config.vocab_size)
-            # logits_masked = F.softmax(logits_gen[masked_bool].reshape(-1, self.discriminator.electra.config.vocab_size), dim=1)
-            # replaced tokens are set with logits
-            # tokens_replaced = logits_masked.multinomial(num_samples=1, replacement=True).reshape(-1)
-            logits = logits_gen[masked_bool]#.reshape(-1, self.discriminator.electra.config.vocab_size)
-            gumbel = self.gumbel_dist.sample(logits.shape)#.to(logits.device)
+            ids_answer = input_ids.clone()
+            ids_answer[masked_bool] = labels[masked_bool]
+
+            logits = logits_gen[masked_bool]
+            gumbel = self.gumbel_dist.sample(logits.shape)
             tokens_replaced = (logits + gumbel).argmax(dim=-1)
-            input_ids_disc = labels.clone()
+            input_ids_disc = input_ids.clone()
             input_ids_disc[masked_bool] = tokens_replaced
-            labels_disc = (input_ids_disc != labels)#.to(torch.long)
+            labels_disc = (input_ids_disc != ids_answer).to(torch.long)
 
         outputs_disc = self.discriminator(
             input_ids=input_ids_disc, attention_mask=attention_mask, token_type_ids=token_type_ids, 
@@ -86,10 +85,6 @@ class ElectraForPretrainingModel(PreTrainedModel):
             labels=labels_disc, output_attentions=output_attentions, 
             output_hidden_states=output_hidden_states, return_dict=return_dict
         )
-        # labels (torch.LongTensor of shape (batch_size, sequence_length), optional) –
-        # Labels for computing the ELECTRA loss. Input should be a sequence of tokens (see input_ids docstring) Indices should be in [0, 1]:
-        # - 0 indicates the token is an original token,
-        # - 1 indicates the token was replaced.
 
         if not return_dict:
             loss_disc = outputs_disc[0]
