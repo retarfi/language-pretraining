@@ -77,7 +77,8 @@ def load_tokenizer(tokenizer_dir:str, max_length:int,
             word_tokenizer_type = "mecab",
             subword_tokenizer_type = "wordpiece",
             tokenize_chinese_chars = False,
-            mecab_kwargs = {'mecab_dic': mecab_dic_type}
+            mecab_kwargs = {'mecab_dic': mecab_dic_type},
+            model_max_length = max_length
         )
     else:
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')
