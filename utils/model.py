@@ -11,7 +11,7 @@ from transformers import (
 )
 from transformers.models.electra.modeling_electra import ElectraForPreTrainingOutput
 
-class ElectraForPretrainingModel(PreTrainedModel):
+class ElectraForPretrainingModel(ElectraPreTrainedModel):
     def __init__(self, config_generator, config_discriminator, loss_weights=(1,50)):
         super().__init__(config_discriminator)
 
@@ -28,6 +28,7 @@ class ElectraForPretrainingModel(PreTrainedModel):
         "Also set dtype and device of contained gumbel distribution if needed"
         return_object = super().to(*args, **kwargs)
         device, dtype = self.generator.device, torch.float32
+        # https://github.com/pytorch/pytorch/issues/41663
         self.gumbel_dist = torch.distributions.gumbel.Gumbel(torch.tensor(0., device=device, dtype=dtype), torch.tensor(1., device=device, dtype=dtype))
         return return_object
 
