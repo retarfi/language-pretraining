@@ -1,4 +1,4 @@
-from .data_collator import DataCollatorForWholeWordMask
+from .data_collator import DataCollatorForWholeWordMask, DataCollatorForLanguageModelingWithElectra
 from .language_modeling import TextDatasetForNextSentencePrediction, LineByLineTextDataset
 from .model import ElectraForPretrainingModel
 from .trainer import MyTrainer

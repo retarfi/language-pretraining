@@ -56,12 +56,15 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         self,
         tokenizer:PreTrainedTokenizer,
         mlm:bool = True,
-        mlm_probability:float = 0.15
+        mlm_probability:float = 0.15,
+        rate_replaced:float = 0.8,
+        rate_random:float = 0.1,
+        rate_unchanged:float = 0.1
     ):
         super().__init__(tokenizer=tokenizer, mlm=mlm, mlm_probability=mlm_probability)
-        self.rate_replaced = 0.8
-        rate_random= 0.1
-        rate_unchanged = 0.1
+        self.rate_replaced = rate_replaced
+        rate_random= rate_random
+        rate_unchanged = rate_unchanged
         assert self.rate_replaced + rate_random + rate_unchanged == 1
 
         # 逆算でreplaceされてないもののうちrandomにする割合を求める
@@ -114,28 +117,23 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = self._whole_word_mask(labels, special_tokens_mask, self.rate_replaced)
-        # indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
         # 10% of the time, we replace masked input tokens with random word
-        # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        indices_random = torch.bernoulli(torch.full(labels.shape, self.rate_random_condition)).bool() & ~indices_replaced
+        indices_random = torch.bernoulli(torch.full(labels.shape, self.rate_random_condition)).bool() & ~indices_replaced & ~special_tokens_mask
         random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
-        # Left 
-        indices_left = torch.bernoulli(torch.full(labels.shape, self.rate_left_condition)).bool() & ~indices_replaced & ~indices_random
-        # masked_indices = torch.bernoulli(probability_matrix).bool()
-        labels[indices_left] = -100  # We only compute loss on masked tokens
-        # print(f'12%:{(indices_replaced.sum(axis=1)/labels.size(1)).mean().float()*100:.1f}, 1.5%:{(indices_random.sum(axis=1)/labels.size(1)).mean().float()*100:.1f}, 85%:{(indices_left.sum(axis=1)/labels.size(1)).mean().float()*100:.1f}')
-
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        indices_left = torch.bernoulli(torch.full(labels.shape, self.rate_left_condition)).bool() & ~indices_replaced & ~indices_random & ~special_tokens_mask
+
+        labels[(~indices_replaced) & (~indices_random) & (~indices_left)] = -100  # We only compute loss on masked tokens
         return inputs, labels
 
 
     def _whole_word_mask(
         self, input_ids:torch.Tensor, special_tokens_mask:torch.Tensor,
-        rate_replaced:float = 0.8, max_predictions:int=512
+        rate_replaced:float, max_predictions:int=512
     ) -> torch.Tensor:
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
@@ -149,7 +147,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             cand_indexes = []
             for i, (token, is_special_token) in enumerate(zip(document_tokens, special_tokens)):
                 if is_special_token:
-                # if token == self.tokenizer.cls_token or token == tokenizer.sep_token:
                     continue
                 if token == self.tokenizer.pad_token:
                     break
@@ -176,3 +173,37 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             mask_indices.append(mask)
         mask_indices = torch.tensor(mask_indices).bool()
         return mask_indices
+
+
+@dataclass
+class DataCollatorForLanguageModelingWithElectra(DataCollatorForLanguageModeling):
+    def mask_tokens(
+        self, inputs: torch.Tensor, special_tokens_mask: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+        labels = inputs.clone()
+        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        probability_matrix = torch.full(labels.shape, self.mlm_probability)
+        if special_tokens_mask is None:
+            special_tokens_mask = [
+                self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+            ]
+            special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+        else:
+            special_tokens_mask = special_tokens_mask.bool()
+
+        probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+        masked_indices = torch.bernoulli(probability_matrix).bool()
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 85% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.85)).bool() & masked_indices
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+
+        # The rest of the time (15% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+
+

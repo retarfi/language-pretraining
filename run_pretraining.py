@@ -4,7 +4,6 @@ from fractions import Fraction
 import json
 import logging
 import os
-import sys
 from typing import Tuple
 import warnings
 
@@ -18,13 +17,8 @@ from transformers import (
     BertConfig,
     BertForPreTraining,
     ElectraConfig,
-    ElectraForMaskedLM,
-    ElectraForPreTraining,
     PreTrainedModel,
-    # Trainer
 )
-from transformers.integrations import TensorBoardCallback
-from transformers.trainer_utils import get_last_checkpoint
 transformers.logging.set_verbosity_info()
 transformers.logging.enable_explicit_format()
 
@@ -184,6 +178,7 @@ def run_pretraining(
         learning_rate = param_config['learning-rate'], 
         adam_beta1 = 0.9, # same as BERT paper
         adam_beta2 = 0.999, # same as BERT paper
+        adam_epsilon = 1e-6,
         weight_decay = 0.01, # same as BERT paper
         warmup_steps = param_config['warmup-steps'], 
         logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
@@ -198,7 +193,6 @@ def run_pretraining(
         max_steps = param_config['train-steps'],
         dataloader_num_workers = 3,
         local_rank = local_rank,
-        # report_to = ["none"]
         report_to = "tensorboard"
     )
     if not do_continue:
@@ -222,17 +216,35 @@ def run_pretraining(
     elif model_name == 'electra':
         mlm_probability = param_config['mask-percent']/100
     if do_whole_word_mask:
-        data_collator = utils.DataCollatorForWholeWordMask(
-            tokenizer = tokenizer, 
-            mlm = True,
-            mlm_probability = mlm_probability
-        )
+        if model_name == 'bert':
+            data_collator = utils.DataCollatorForWholeWordMask(
+                tokenizer = tokenizer, 
+                mlm = True,
+                mlm_probability = mlm_probability
+            )
+        elif model_name == 'electra':
+            # https://github.com/google-research/electra/issues/57
+            data_collator = utils.DataCollatorForWholeWordMask(
+                tokenizer = tokenizer, 
+                mlm = True,
+                mlm_probability = mlm_probability,
+                rate_replaced = 0.85,
+                rate_random = 0,
+                rate_unchanged = 0.15
+            )
     else:
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer = tokenizer,
-            mlm = True,
-            mlm_probability = mlm_probability
-        )
+        if model_name == 'bert':
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer = tokenizer,
+                mlm = True,
+                mlm_probability = mlm_probability
+            )
+        elif model_name == 'electra':
+            data_collator = utils.DataCollatorForLanguageModelingWithElectra(
+                tokenizer = tokenizer,
+                mlm = True,
+                mlm_probability = mlm_probability
+            )
     logger.info('Datacollator was complete.')
     
     trainer = utils.MyTrainer(
