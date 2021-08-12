@@ -116,7 +116,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             special_tokens_mask = special_tokens_mask.bool()
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = self._whole_word_mask(labels, special_tokens_mask, self.rate_replaced)
+        indices_replaced = self._whole_word_mask(labels, special_tokens_mask)
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
         # 10% of the time, we replace masked input tokens with random word
@@ -133,7 +133,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     def _whole_word_mask(
         self, input_ids:torch.Tensor, special_tokens_mask:torch.Tensor,
-        rate_replaced:float, max_predictions:int=512
+        max_predictions:int=512
     ) -> torch.Tensor:
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
