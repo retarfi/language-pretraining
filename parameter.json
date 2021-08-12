@@ -38,7 +38,7 @@
         },
         "train-steps" : 464000
     },
-    "electra-small" : {
+    "electra-small-paper" : {
         "number-of-layers" : 12,
         "hidden-size" : 256,
         "sequence-length" : 128,
@@ -46,6 +46,22 @@
         "attention-heads" : 4,
         "embedding-size" : 128,
         "generator-size" : "1/4",
+        "mask-percent" : 15,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "-1" : 128
+        },
+        "train-steps" : 1000000
+    },
+    "electra-small" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 256,
+        "sequence-length" : 128,
+        "ffn-inner-hidden-size" : 1024,
+        "attention-heads" : 4,
+        "embedding-size" : 128,
+        "generator-size" : "1/1",
         "mask-percent" : 15,
         "warmup-steps" : 10000,
         "learning-rate" : 5e-4,
