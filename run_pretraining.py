@@ -26,7 +26,7 @@ import utils
 
 
 warnings.simplefilter('ignore', UserWarning)
-assert any(v in torch.__version__ for v in ['1.8.0', '1.8.1']), f'This file is only guranteed with pytorch 1.8.0 or 1.8.1, but this is {torch.__version__}'
+assert any(v in torch.__version__ for v in ['1.9.0']), f'This file is only guranteed with pytorch 1.9.0, but this is {torch.__version__}'
 assert transformers.__version__ in ['4.7.0'], f'This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}'
 
 
@@ -191,7 +191,7 @@ def run_pretraining(
         fp16_opt_level = "O2", #:Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
-        dataloader_num_workers = 3,
+        dataloader_num_workers = 0,
         local_rank = local_rank,
         report_to = "tensorboard"
     )
