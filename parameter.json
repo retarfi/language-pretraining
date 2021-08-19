@@ -10,7 +10,8 @@
         "batch-size" : {
             "-1" : 128
         },
-        "train-steps" : 1450000
+        "train-steps" : 1450000,
+        "save-steps" : 100000
     },
     "bert-base" : {
         "number-of-layers" : 12,
@@ -52,7 +53,8 @@
         "batch-size" : {
             "-1" : 128
         },
-        "train-steps" : 1000000
+        "train-steps" : 1000000,
+        "save-steps" : 100000
     },
     "electra-small" : {
         "number-of-layers" : 12,
@@ -68,7 +70,8 @@
         "batch-size" : {
             "-1" : 128
         },
-        "train-steps" : 1000000
+        "train-steps" : 1000000,
+        "save-steps" : 100000
     },
     "electra-base" : {
         "number-of-layers" : 12,

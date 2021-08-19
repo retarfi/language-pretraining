@@ -182,9 +182,9 @@ def run_pretraining(
         weight_decay = 0.01, # same as BERT paper
         warmup_steps = param_config['warmup-steps'], 
         logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
-        save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 10000, #default:500
+        save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 50000, #default:500
         save_strategy = "steps", # default:"steps"
-        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 1000, # default:500
+        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
         save_total_limit = 20, # optional
         seed = 42, # default
         fp16 = bool(torch.cuda.device_count()>0),
