@@ -115,7 +115,9 @@
             "1" : 100,
             "2" : 56
         },
-        "train-steps" : 1000000
+        "train-steps" : 1000000,
+        "save-steps" : 50000,
+        "logging-steps" : 5000
     },
     "electra-base-suzuki" : {
         "number-of-layers" : 12,
