@@ -60,6 +60,8 @@ def train_tokenizer(
         output_dir:str,
         vocab_size:int,
         min_frequency:int,
+        limit_alphabet:int,
+        num_unused_tokens:int,
         tokenizer_type:str,
     ) -> None:
 
@@ -96,17 +98,14 @@ def train_tokenizer(
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')    
 
     logger.info('Train tokenizer...')
+    special_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+    special_tokens += ['<unused{}>'.format(i) for i in range(args.num_unused_tokens)]
     tokenizer.train(
         files = files, 
         vocab_size = vocab_size, 
         min_frequency = min_frequency, 
-        special_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-        ]
+        limit_alphabet = limit_alphabet,
+        special_tokens = special_tokens
     )
 
     # save tokenizer
@@ -129,8 +128,10 @@ if __name__ == "__main__":
     parser.add_argument('--mecab_option', type=str, default='')
     # train tokenize option
     parser.add_argument('--tokenizer_type', required=True, type=str, choices=['sentencepiece', 'wordpiece'])
-    parser.add_argument('--vocab_size', type=int, default=32000)
+    parser.add_argument('--vocab_size', type=int, default=32768)
     parser.add_argument('--min_frequency', type=int, default=2)
+    parser.add_argument('--limit_alphabet', type=int, default=6129)
+    parser.add_argument('--num_unused_tokens', type=int, default=10)
     args = parser.parse_args()
     if '.txt' not in args.input_file:
         raise ValueError('input_file must be a txt file')
@@ -202,5 +203,7 @@ if __name__ == "__main__":
         output_dir = args.model_dir,
         vocab_size = args.vocab_size,
         min_frequency = args.min_frequency,
+        limit_alphabet = args.limit_alphabet,
+        num_unused_tokens = args.num_unused_tokens,
         tokenizer_type = args.tokenizer_type,
     )
