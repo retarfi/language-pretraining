@@ -89,7 +89,8 @@ def train_tokenizer(
     elif tokenizer_type=='wordpiece':
         tokenizer = BertWordPieceTokenizer(
             handle_chinese_chars=False,
-            strip_accents=False
+            strip_accents=False,
+            lowercase=False
         )
     else:
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')    
