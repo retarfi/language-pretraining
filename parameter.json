@@ -111,9 +111,9 @@
         "warmup-steps" : 10000,
         "learning-rate" : 1e-4,
         "batch-size" : {
-            "0" : 100,
+            "0" : 98,
             "1" : 100,
-            "2" : 56
+            "2" : 58
         },
         "train-steps" : 1000000,
         "save-steps" : 50000,
@@ -131,9 +131,9 @@
         "warmup-steps" : 10000,
         "learning-rate" : 2e-4,
         "batch-size" : {
-            "0" : 100,
+            "0" : 98,
             "1" : 100,
-            "2" : 56
+            "2" : 58
         },
         "train-steps" : 766000
     }
