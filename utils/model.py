@@ -11,7 +11,7 @@ from transformers import (
 from transformers.models.electra.modeling_electra import ElectraForPreTrainingOutput
 
 class ElectraForPretrainingModel(ElectraPreTrainedModel):
-    def __init__(self, config_generator, config_discriminator, loss_weights=(1,50)):
+    def __init__(self, config_generator, config_discriminator, loss_weights=(1.0,50.0)):
         super().__init__(config_discriminator)
 
         self.generator = ElectraForMaskedLM(config_generator)
@@ -48,6 +48,8 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         )
 
         loss_gen = outputs_gen.loss # (1,)
+        if torch.isnan(loss_gen):
+            raise ValueError('output_gen is NaN')
         logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
         with torch.no_grad():
             masked_bool = (labels != -100)
@@ -72,9 +74,11 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         if not return_dict:
             loss_disc = outputs_disc[0]
             total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
-            return ((total_loss,) + outputs_disc) if total_loss is not None else outputs_disc
+            return ((total_loss,) + outputs_disc[1:]) if total_loss is not None else outputs_disc
 
         loss_disc = outputs_disc.loss
+        if torch.isnan(loss_disc):
+            raise ValueError('loss_disc is NaN')
         total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
         return ElectraForPreTrainingOutput(
             loss=total_loss,
