@@ -248,7 +248,7 @@ class LineByLineTextDataset(Dataset):
 
     def __init__(
         self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int,
-        overwrite_cache:bool = False, short_seq_probability:float = 0.1,
+        overwrite_cache:bool = True, short_seq_probability:float = 0.05,
     ):
         warnings.warn(
             DEPRECATION_WARNING.format(
@@ -293,7 +293,6 @@ class LineByLineTextDataset(Dataset):
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )
-                print(max([len(x['input_ids']) for x in self.examples]))
 
             else:
                 logger.info(f"Creating features from dataset file at {directory}")
@@ -326,6 +325,72 @@ class LineByLineTextDataset(Dataset):
                     f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
+    # # Overwride TextDatasetForNextSentencePrediction.create_examples_from_document
+    # def create_examples_from_document(self, document: List[np.ndarray], doc_index: int, block_size: int):
+    #     """Creates examples for a single document."""
+
+    #     max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
+
+    #     # We *usually* want to fill up the entire sequence since we are padding
+    #     # to `block_size` anyways, so short sequences are generally wasted
+    #     # computation. However, we *sometimes*
+    #     # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
+    #     # sequences to minimize the mismatch between pretraining and fine-tuning.
+    #     # The `target_seq_length` is just a rough target however, whereas
+    #     # `block_size` is a hard limit.
+    #     target_seq_length = max_num_tokens
+    #     if random.random() < self.short_seq_probability:
+    #         target_seq_length = random.randint(2, max_num_tokens)
+
+    #     current_chunk = []  # a buffer stored current working segments
+    #     current_length = 0
+    #     i = 0
+
+    #     while i < len(document):
+    #         segment = document[i].tolist()
+    #         current_chunk.append(segment)
+    #         current_length += len(segment)
+    #         if i == len(document) - 1 or current_length >= target_seq_length:
+    #             if current_chunk:
+    #                 if len(current_chunk) >= 2 and current_length > target_seq_length:
+    #                     # We didn't actually use these segments so we "put them back" so
+    #                     # they don't go to waste.
+    #                     current_chunk.pop()
+    #                     i -= 1
+
+    #                 tokens = []
+    #                 for ch in current_chunk:
+    #                     tokens += ch
+
+    #                 def truncate_seq_pair(tokens, max_num_tokens):
+    #                     """Truncates a pair of sequences to a maximum sequence length."""
+    #                     while True:
+    #                         total_length = len(tokens)
+    #                         if total_length <= max_num_tokens:
+    #                             break
+    #                         assert len(tokens) >= 1
+    #                         # We want to sometimes truncate from the front and sometimes from the
+    #                         # back to add more randomness and avoid biases.
+    #                         if random.random() < 0.5:
+    #                             del tokens[0]
+    #                         else:
+    #                             tokens.pop()
+
+    #                 truncate_seq_pair(tokens, max_num_tokens)
+
+    #                 assert len(tokens) >= 1
+
+    #                 # add special tokens
+    #                 input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens)
+
+    #                 # 後でcastする
+    #                 self.examples.append({"input_ids": torch.tensor(input_ids, dtype=torch.int)})
+
+    #             current_chunk = []
+    #             current_length = 0
+
+    #         i += 1
+
     # Overwride TextDatasetForNextSentencePrediction.create_examples_from_document
     def create_examples_from_document(self, document: List[np.ndarray], doc_index: int, block_size: int):
         """Creates examples for a single document."""
@@ -341,7 +406,7 @@ class LineByLineTextDataset(Dataset):
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
         if random.random() < self.short_seq_probability:
-            target_seq_length = random.randint(2, max_num_tokens)
+            target_seq_length = random.randint(5, max_num_tokens)
 
         current_chunk = []  # a buffer stored current working segments
         current_length = 0
@@ -353,39 +418,52 @@ class LineByLineTextDataset(Dataset):
             current_length += len(segment)
             if i == len(document) - 1 or current_length >= target_seq_length:
                 if current_chunk:
-                    if len(current_chunk) >= 2 and current_length > target_seq_length:
-                        # We didn't actually use these segments so we "put them back" so
-                        # they don't go to waste.
-                        current_chunk.pop()
-                        i -= 1
+                    # `a_end` is how many segments from `current_chunk` go into the `A`
+                    # (first) sentence.
+                    a_end = 1
+                    if len(current_chunk) >= 2:
+                        a_end = random.randint(1, len(current_chunk) - 1)
 
-                    tokens = []
-                    for ch in current_chunk:
-                        tokens += ch
+                    tokens_a = []
+                    for j in range(a_end):
+                        tokens_a.extend(current_chunk[j])
 
-                    def truncate_seq_pair(tokens, max_num_tokens):
+                    tokens_b = []
+                    for j in range(a_end, len(current_chunk)):
+                        tokens_b.extend(current_chunk[j])
+
+                    def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
                         """Truncates a pair of sequences to a maximum sequence length."""
                         while True:
-                            total_length = len(tokens)
+                            total_length = len(tokens_a) + len(tokens_b)
                             if total_length <= max_num_tokens:
                                 break
-                            assert len(tokens) >= 1
+                            trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+                            assert len(trunc_tokens) >= 1
                             # We want to sometimes truncate from the front and sometimes from the
                             # back to add more randomness and avoid biases.
                             if random.random() < 0.5:
-                                del tokens[0]
+                                del trunc_tokens[0]
                             else:
-                                tokens.pop()
+                                trunc_tokens.pop()
 
-                    truncate_seq_pair(tokens, max_num_tokens)
+                    truncate_seq_pair(tokens_a, tokens_b, max_num_tokens)
 
-                    assert len(tokens) >= 1
+                    assert len(tokens_a) >= 1
+                    assert len(tokens_b) >= 0
 
                     # add special tokens
-                    input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens)
+                    input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                    # add token type ids, 0 for sentence a, 1 for sentence b
+                    token_type_ids = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
 
                     # 後でcastする
-                    self.examples.append({"input_ids": torch.tensor(input_ids, dtype=torch.int)})
+                    example = {
+                        "input_ids": torch.tensor(input_ids, dtype=torch.int),
+                        "token_type_ids": torch.tensor(token_type_ids, dtype=torch.uint8),
+                    }
+
+                    self.examples.append(example)
 
                 current_chunk = []
                 current_length = 0
@@ -397,17 +475,4 @@ class LineByLineTextDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.tensor]:
         return self.examples[i]
-
-
-
-def batch_encoding(file_path:str, tokenizer:PreTrainedTokenizer, block_size:int) -> list:
-    lines = []
-    with open(file_path, encoding="utf-8") as f:
-        # lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-        for line in f:
-            if len(line) > 0 and not line.isspace():
-                lines.append(line.rstrip())
-
-    batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
-    return batch_encoding["input_ids"]
 
