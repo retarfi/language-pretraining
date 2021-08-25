@@ -621,10 +621,6 @@ class MyTrainer(Trainer):
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
-            # THIS IS ADDED BY RETARFI
-            self._save_checkpoint(model, trial, metrics=metrics)
-            self.control = self.callback_handler.on_save(self.args, self.state, self.control)
-
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -637,6 +633,10 @@ class MyTrainer(Trainer):
             if self.control.should_training_stop:
                 break
 
+        # THIS IS ADDED BY RETARFI
+        self._save_checkpoint(model, trial, metrics=None)
+        self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+        
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
