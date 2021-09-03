@@ -339,7 +339,7 @@ if __name__ == "__main__":
         input_file = args.input_file,
         model_name = model_name,
         model_dir = args.model_dir,
-        fp16_type = args.fp16_type
+        fp16_type = args.fp16_type,
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
