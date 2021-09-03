@@ -116,6 +116,7 @@ def make_dataset_model_electra(
     dataset = utils.LineByLineTextDataset(
         tokenizer = tokenizer, 
         file_path = input_file, 
+        overwrite_cache = False,
         block_size = param_config['sequence-length'],
     )
     frac_generator = Fraction(param_config['generator-size'])

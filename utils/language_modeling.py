@@ -40,7 +40,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         tokenizer: PreTrainedTokenizer,
         file_path: str,
         block_size: int,
-        overwrite_cache:bool = False,
+        overwrite_cache:bool,
         short_seq_probability:float = 0.1,
         nsp_probability:float = 0.5,
     ):
@@ -248,7 +248,7 @@ class LineByLineTextDataset(Dataset):
 
     def __init__(
         self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int,
-        overwrite_cache:bool = True, short_seq_probability:float = 0.05,
+        overwrite_cache:bool, short_seq_probability:float = 0.05,
     ):
         warnings.warn(
             DEPRECATION_WARNING.format(
