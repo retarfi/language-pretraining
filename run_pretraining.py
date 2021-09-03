@@ -149,6 +149,7 @@ def run_pretraining(
         input_file:str,
         model_name:str,
         model_dir:str,
+        fp16_type:int,
         param_config:dict,
         do_whole_word_mask:bool,
         do_continue:bool,
@@ -188,8 +189,9 @@ def run_pretraining(
         logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
         save_total_limit = 20, # optional
         seed = 42, # default
-        fp16 = bool(torch.cuda.device_count()>0),
-        fp16_opt_level = "O2", #:Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
+        fp16 = bool(fp16_type!=0),
+        fp16_opt_level = f"O{fp16_type}", 
+        #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
         dataloader_num_workers = 3,
@@ -272,6 +274,8 @@ if __name__ == "__main__":
     parser.add_argument('--model_dir', type=str, required=True)
     parser.add_argument('--parameter_file', type=str, required=True)
     parser.add_argument('--model_type', type=str, required=True)
+    parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
+                                        help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
     parser.add_argument('--tokenizer_type', type=str, choices=['sentencepiece', 'wordpiece'])
     parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
     parser.add_argument('--run_name', type=str, default='')
@@ -331,6 +335,7 @@ if __name__ == "__main__":
         input_file = args.input_file,
         model_name = model_name,
         model_dir = args.model_dir,
+        fp16_type = args.fp16_type
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
