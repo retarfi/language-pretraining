@@ -343,7 +343,7 @@ if __name__ == "__main__":
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
-        overwrite_cache = not args.disable_overwrite_cache
+        overwrite_cache = not args.disable_overwrite_cache,
         node_rank = args.node_rank,
         local_rank = args.local_rank,
         run_name = args.run_name,
