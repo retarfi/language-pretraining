@@ -284,7 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
-    parser.add_argument('--disable_overwrite_cache', action='store_false')
+    parser.add_argument('--disable_overwrite_cache', action='store_true')
     parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
 
