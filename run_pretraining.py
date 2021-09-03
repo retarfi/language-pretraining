@@ -84,12 +84,13 @@ def make_dataset_model_bert(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
         param_config:dict,
+        overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
 
     dataset = utils.TextDatasetForNextSentencePrediction(
         tokenizer = tokenizer, 
         file_path = input_file, 
-        overwrite_cache= False,
+        overwrite_cache = overwrite_cache,
         block_size = param_config['sequence-length'],
         short_seq_probability = 0.1, # default
         nsp_probability = 0.5, # default
@@ -111,12 +112,13 @@ def make_dataset_model_electra(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
         param_config:dict,
+        overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
 
     dataset = utils.LineByLineTextDataset(
         tokenizer = tokenizer, 
         file_path = input_file, 
-        overwrite_cache = False,
+        overwrite_cache = overwrite_cache,
         block_size = param_config['sequence-length'],
     )
     frac_generator = Fraction(param_config['generator-size'])
@@ -153,6 +155,7 @@ def run_pretraining(
         param_config:dict,
         do_whole_word_mask:bool,
         do_continue:bool,
+        overwrite_cache:bool,
         node_rank:int,
         local_rank:int,
         run_name:str
@@ -209,9 +212,9 @@ def run_pretraining(
 
     # dataset and model
     if model_name == 'bert':
-        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, param_config)
+        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, param_config, overwrite_cache)
     elif model_name == 'electra':
-        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, param_config)
+        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, param_config, overwrite_cache)
     logger.info('Dataset was complete.')
 
     # data collator
@@ -281,6 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
+    parser.add_argument('--disable_overwrite_cache', action='store_false')
     parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
 
@@ -339,7 +343,8 @@ if __name__ == "__main__":
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
+        overwrite_cache = not args.disable_overwrite_cache
         node_rank = args.node_rank,
         local_rank = args.local_rank,
-        run_name = args.run_name
+        run_name = args.run_name,
     )
