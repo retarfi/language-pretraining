@@ -137,5 +137,36 @@
             "2" : 56
         },
         "train-steps" : 766000
+    },
+    "bert-small-dist" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 256,
+        "sequence-length" : 128,
+        "ffn-inner-hidden-size" : 1024,
+        "attention-heads" : 4,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "0" : 64
+        },
+        "train-steps" : 1000000,
+        "save-steps" : 50000
+    },
+    "electra-small-paper-dist" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 256,
+        "sequence-length" : 128,
+        "ffn-inner-hidden-size" : 1024,
+        "attention-heads" : 4,
+        "embedding-size" : 128,
+        "generator-size" : "1/4",
+        "mask-percent" : 15,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "0" : 128
+        },
+        "train-steps" : 1000000,
+        "save-steps" : 100000
     }
 }
