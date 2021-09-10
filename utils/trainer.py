@@ -37,7 +37,7 @@ def on_log(self, args, state, control, logs=None, **kwargs):
         for k, v in logs.items():
             if isinstance(v, (int, float)):
                 self.tb_writer.add_scalar(k, v, state.global_step)
-            elif k in [x + y for x in ['', 'train/'] for y in ['elapsed_time', 'current_time']]:
+            elif k in [x + y for x in ['', 'train/'] for y in ['elapsed_time', 'current_time', 'remaining_time']]:
                 continue
             else:
                 logger.warning(
@@ -148,50 +148,50 @@ class MyTrainer(Trainer):
                 #     seed=self.args.seed,
                 # )
 
-    def get_train_dataloader(self) -> DataLoader:
-        """
-        Returns the training :class:`~torch.utils.data.DataLoader`.
-        Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
-        to distributed training if necessary) otherwise.
-        Subclass and override this method if you want to inject some custom behavior.
-        """
-        if self.train_dataset is None:
-            raise ValueError("Trainer: training requires a train_dataset.")
+    # def get_train_dataloader(self) -> DataLoader:
+    #     """
+    #     Returns the training :class:`~torch.utils.data.DataLoader`.
+    #     Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
+    #     to distributed training if necessary) otherwise.
+    #     Subclass and override this method if you want to inject some custom behavior.
+    #     """
+    #     if self.train_dataset is None:
+    #         raise ValueError("Trainer: training requires a train_dataset.")
 
-        train_dataset = self.train_dataset
-        if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
-            train_dataset = self._remove_unused_columns(train_dataset, description="training")
+    #     train_dataset = self.train_dataset
+    #     if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+    #         train_dataset = self._remove_unused_columns(train_dataset, description="training")
 
-        if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
-            if self.args.world_size > 1:
-                train_dataset = MyIterableDatasetShard(
-                    train_dataset,
-                    real_batch_size=self.real_batch_size,
-                    batch_size=self.args.train_batch_size,
-                    drop_last=self.args.dataloader_drop_last,
-                    num_processes=self.args.world_size,
-                    process_index=self.args.process_index,
-                )
+    #     if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
+    #         if self.args.world_size > 1:
+    #             train_dataset = MyIterableDatasetShard(
+    #                 train_dataset,
+    #                 real_batch_size=self.real_batch_size,
+    #                 batch_size=self.args.train_batch_size,
+    #                 drop_last=self.args.dataloader_drop_last,
+    #                 num_processes=self.args.world_size,
+    #                 process_index=self.args.process_index,
+    #             )
 
-            return DataLoader(
-                train_dataset,
-                batch_size=self.args.train_batch_size,
-                collate_fn=self.data_collator,
-                num_workers=self.args.dataloader_num_workers,
-                pin_memory=self.args.dataloader_pin_memory,
-            )
+    #         return DataLoader(
+    #             train_dataset,
+    #             batch_size=self.args.train_batch_size,
+    #             collate_fn=self.data_collator,
+    #             num_workers=self.args.dataloader_num_workers,
+    #             pin_memory=self.args.dataloader_pin_memory,
+    #         )
 
-        train_sampler = self._get_train_sampler()
+    #     train_sampler = self._get_train_sampler()
 
-        return DataLoader(
-            train_dataset,
-            batch_size=self.args.train_batch_size,
-            sampler=train_sampler,
-            collate_fn=self.data_collator,
-            drop_last=self.args.dataloader_drop_last,
-            num_workers=self.args.dataloader_num_workers,
-            pin_memory=self.args.dataloader_pin_memory,
-        )
+    #     return DataLoader(
+    #         train_dataset,
+    #         batch_size=self.args.train_batch_size,
+    #         sampler=train_sampler,
+    #         collate_fn=self.data_collator,
+    #         drop_last=self.args.dataloader_drop_last,
+    #         num_workers=self.args.dataloader_num_workers,
+    #         pin_memory=self.args.dataloader_pin_memory,
+    #     )
 
     # override class of Trainer
     def log(self, logs: Dict[str, float]) -> None:
@@ -212,14 +212,19 @@ class MyTrainer(Trainer):
         mylogs["step"] = self.state.global_step
         mylogs["current_time"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
         td = datetime.timedelta(seconds=time.time()-self.start_time)
-        mm, ss = divmod(td.seconds, 60)
-        hh, mm = divmod(mm, 60)
-        elapsed_time = "%d:%02d:%02d" % (hh, mm, ss)
-        if td.days:
-            def plural(n):
-                return n, abs(n) != 1 and "s" or ""
-            elapsed_time = ("%d day%s, " % plural(td.days)) + elapsed_time
-        mylogs["elapsed_time"] = elapsed_time
+        def seconds_to_str_time(seconds):
+            mm, ss = divmod(seconds, 60)
+            hh, mm = divmod(mm, 60)
+            str_time = "%d:%02d:%02d" % (hh, mm, ss)
+            if td.days:
+                def plural(n):
+                    return n, abs(n) != 1 and "s" or ""
+                str_time = ("%d day%s, " % plural(td.days)) + elapsed_time
+            return str_time
+        mylogs["elapsed_time"] = seconds_to_str_time(td.seconds)
+
+        if self.args.max_steps > 0:
+            mylogs["remaining_time"] = seconds_to_str_time(td.seconds * (self.args.max_steps - self.state.global_step) / self.state.global_step)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, mylogs)
 
     def create_optimizer(self):
