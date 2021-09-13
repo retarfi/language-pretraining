@@ -26,7 +26,7 @@ import utils
 
 
 warnings.simplefilter('ignore', UserWarning)
-assert any(v in torch.__version__ for v in ['1.9.0']), f'This file is only guranteed with pytorch 1.9.0, but this is {torch.__version__}'
+assert any(v in torch.__version__ for v in ['1.8.0', '1.8.1', '1.8.2', '1.9.0']), f'This file is only guranteed with pytorch 1.9.0, but this is {torch.__version__}'
 assert transformers.__version__ in ['4.7.0'], f'This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}'
 
 
@@ -202,6 +202,7 @@ def run_pretraining(
         local_rank = local_rank,
         report_to = "tensorboard"
     )
+    training_args._setup_devices = utils._setup_devices
     if not do_continue:
         if local_rank != -1:
             if torch.cuda.device_count() > 0:
