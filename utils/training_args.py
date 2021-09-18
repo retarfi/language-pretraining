@@ -58,7 +58,7 @@ def _setup_devices(self) -> "torch.device":
         '''THIS IS CHANGED'''
         torch.distributed.init_process_group(
             backend="nccl",
-            timeout=datetime.timedelta(0,5400)
+            timeout=datetime.timedelta(0,9000)
         )
         device = torch.device("cuda", self.local_rank)
         self._n_gpu = 1
