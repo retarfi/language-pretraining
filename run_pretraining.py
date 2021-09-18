@@ -26,7 +26,7 @@ import utils
 
 
 warnings.simplefilter('ignore', UserWarning)
-assert any(v in torch.__version__ for v in ['1.8.0', '1.8.1']), f'This file is only guranteed with pytorch 1.8.0 or 1.8.1, but this is {torch.__version__}'
+assert any(v in torch.__version__ for v in ['1.8.0', '1.8.1', '1.8.2', '1.9.0']), f'This file is only guranteed with pytorch 1.9.0, but this is {torch.__version__}'
 assert transformers.__version__ in ['4.7.0'], f'This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}'
 
 
@@ -84,12 +84,13 @@ def make_dataset_model_bert(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
         param_config:dict,
+        overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
 
     dataset = utils.TextDatasetForNextSentencePrediction(
         tokenizer = tokenizer, 
         file_path = input_file, 
-        overwrite_cache= False,
+        overwrite_cache = overwrite_cache,
         block_size = param_config['sequence-length'],
         short_seq_probability = 0.1, # default
         nsp_probability = 0.5, # default
@@ -111,11 +112,13 @@ def make_dataset_model_electra(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
         param_config:dict,
+        overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
 
     dataset = utils.LineByLineTextDataset(
         tokenizer = tokenizer, 
         file_path = input_file, 
+        overwrite_cache = overwrite_cache,
         block_size = param_config['sequence-length'],
     )
     frac_generator = Fraction(param_config['generator-size'])
@@ -148,9 +151,11 @@ def run_pretraining(
         input_file:str,
         model_name:str,
         model_dir:str,
+        fp16_type:int,
         param_config:dict,
         do_whole_word_mask:bool,
         do_continue:bool,
+        overwrite_cache:bool,
         node_rank:int,
         local_rank:int,
         run_name:str
@@ -182,19 +187,22 @@ def run_pretraining(
         weight_decay = 0.01, # same as BERT paper
         warmup_steps = param_config['warmup-steps'], 
         logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
-        save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 10000, #default:500
+        save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 50000, #default:500
         save_strategy = "steps", # default:"steps"
-        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 1000, # default:500
+        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
         save_total_limit = 20, # optional
         seed = 42, # default
-        fp16 = bool(torch.cuda.device_count()>0),
-        fp16_opt_level = "O2", #:Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
+        fp16 = bool(fp16_type!=0),
+        fp16_opt_level = f"O{fp16_type}", 
+        #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
         dataloader_num_workers = 3,
+        dataloader_pin_memory=False,
         local_rank = local_rank,
         report_to = "tensorboard"
     )
+    training_args._setup_devices = utils._setup_devices
     if not do_continue:
         if local_rank != -1:
             if torch.cuda.device_count() > 0:
@@ -205,9 +213,9 @@ def run_pretraining(
 
     # dataset and model
     if model_name == 'bert':
-        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, param_config)
+        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, param_config, overwrite_cache)
     elif model_name == 'electra':
-        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, param_config)
+        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, param_config, overwrite_cache)
     logger.info('Dataset was complete.')
 
     # data collator
@@ -270,11 +278,14 @@ if __name__ == "__main__":
     parser.add_argument('--model_dir', type=str, required=True)
     parser.add_argument('--parameter_file', type=str, required=True)
     parser.add_argument('--model_type', type=str, required=True)
+    parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
+                                        help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
     parser.add_argument('--tokenizer_type', type=str, choices=['sentencepiece', 'wordpiece'])
     parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
+    parser.add_argument('--disable_overwrite_cache', action='store_true')
     parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
 
@@ -329,10 +340,12 @@ if __name__ == "__main__":
         input_file = args.input_file,
         model_name = model_name,
         model_dir = args.model_dir,
+        fp16_type = args.fp16_type,
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
+        overwrite_cache = not args.disable_overwrite_cache,
         node_rank = args.node_rank,
         local_rank = args.local_rank,
-        run_name = args.run_name
+        run_name = args.run_name,
     )

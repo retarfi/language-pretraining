@@ -2,3 +2,4 @@ from .data_collator import DataCollatorForWholeWordMask, DataCollatorForLanguage
 from .language_modeling import TextDatasetForNextSentencePrediction, LineByLineTextDataset
 from .model import ElectraForPretrainingModel
 from .trainer import MyTrainer
+from .training_args import _setup_devices

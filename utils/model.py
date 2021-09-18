@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from transformers import (
     ElectraConfig, 
     ElectraForMaskedLM, 
-    PreTrainedModel,
     ElectraForPreTraining, 
     ElectraPreTrainedModel,
     Trainer
@@ -12,7 +11,7 @@ from transformers import (
 from transformers.models.electra.modeling_electra import ElectraForPreTrainingOutput
 
 class ElectraForPretrainingModel(ElectraPreTrainedModel):
-    def __init__(self, config_generator, config_discriminator, loss_weights=(1,50)):
+    def __init__(self, config_generator, config_discriminator, loss_weights=(1.0,50.0)):
         super().__init__(config_discriminator)
 
         self.generator = ElectraForMaskedLM(config_generator)
@@ -32,28 +31,10 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         self.gumbel_dist = torch.distributions.gumbel.Gumbel(torch.tensor(0., device=device, dtype=dtype), torch.tensor(1., device=device, dtype=dtype))
         return return_object
 
-
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
     def forward(
             self, 
             input_ids, labels, attention_mask=None, token_type_ids=None, 
-            position_ids=None, head_mask=None, inputs_embeds=None, 
+            position_ids=None,
             output_attentions=None, 
             output_hidden_states=None, return_dict=None
         ):
@@ -61,28 +42,31 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
 
         outputs_gen = self.generator(
             input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, 
-            position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, 
+            position_ids=position_ids,
             labels=labels, output_attentions=False, 
             output_hidden_states=False, return_dict=True
         )
 
         loss_gen = outputs_gen.loss # (1,)
+        if torch.isnan(loss_gen):
+            raise ValueError('output_gen is NaN')
         logits_gen = outputs_gen.logits # (batch_size, seq_length, config.vocab_size)
         with torch.no_grad():
             masked_bool = (labels != -100)
-            ids_answer = input_ids.clone()
-            ids_answer[masked_bool] = labels[masked_bool]
+            # ids_answer = input_ids.clone()
+            # ids_answer[masked_bool] = labels[masked_bool]
 
             logits = logits_gen[masked_bool]
             gumbel = self.gumbel_dist.sample(logits.shape)
             tokens_replaced = (logits + gumbel).argmax(dim=-1)
             input_ids_disc = input_ids.clone()
             input_ids_disc[masked_bool] = tokens_replaced
-            labels_disc = (input_ids_disc != ids_answer).to(torch.long)
+            labels_disc = torch.zeros(labels.shape, dtype=torch.long, device=labels.device)
+            labels_disc[masked_bool] = (tokens_replaced != labels[masked_bool]).to(torch.long)
 
         outputs_disc = self.discriminator(
             input_ids=input_ids_disc, attention_mask=attention_mask, token_type_ids=token_type_ids, 
-            position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, 
+            position_ids=position_ids,
             labels=labels_disc, output_attentions=output_attentions, 
             output_hidden_states=output_hidden_states, return_dict=return_dict
         )
@@ -90,9 +74,11 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         if not return_dict:
             loss_disc = outputs_disc[0]
             total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
-            return ((total_loss,) + outputs_disc) if total_loss is not None else outputs_disc
+            return ((total_loss,) + outputs_disc[1:]) if total_loss is not None else outputs_disc
 
         loss_disc = outputs_disc.loss
+        if torch.isnan(loss_disc):
+            raise ValueError('loss_disc is NaN')
         total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
         return ElectraForPreTrainingOutput(
             loss=total_loss,
