@@ -15,7 +15,7 @@ from transformers import __version__
 
 
 # Override
-from .trainer_pt_utils import DistributedLengthGroupedSampler, MyDistributedSampler, MyIterableDatasetShard
+from .trainer_pt_utils import MyDistributedSampler
 
 _is_torch_generator_available = False
 
@@ -94,15 +94,9 @@ class MyTrainer(Trainer):
                     generator=generator,
                 )
             else:
-                '''
-                THIS IS CHANGED
-                '''
                 return DistributedLengthGroupedSampler(
                     self.train_dataset,
                     self.args.train_batch_size,
-                    real_batch_size=self.real_batch_size,
-                    batch_config=self.batch_config,
-                    node_rank=self.node_rank,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     lengths=lengths,
@@ -133,66 +127,13 @@ class MyTrainer(Trainer):
                 '''
                 return MyDistributedSampler(
                     self.train_dataset,
-                    self.args.train_batch_size,
-                    real_batch_size=self.real_batch_size,
+                    self.args.per_device_train_batch_size,
                     batch_config = self.batch_config,
                     node_rank=self.node_rank,
-                    num_replicas=self.args.world_size,
                     rank=self.args.process_index,
                     seed=self.args.seed,
                 )
-                # return DistributedSampler(
-                #     self.train_dataset,
-                #     num_replicas=self.args.world_size,
-                #     rank=self.args.process_index,
-                #     seed=self.args.seed,
-                # )
-
-    # def get_train_dataloader(self) -> DataLoader:
-    #     """
-    #     Returns the training :class:`~torch.utils.data.DataLoader`.
-    #     Will use no sampler if :obj:`self.train_dataset` does not implement :obj:`__len__`, a random sampler (adapted
-    #     to distributed training if necessary) otherwise.
-    #     Subclass and override this method if you want to inject some custom behavior.
-    #     """
-    #     if self.train_dataset is None:
-    #         raise ValueError("Trainer: training requires a train_dataset.")
-
-    #     train_dataset = self.train_dataset
-    #     if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
-    #         train_dataset = self._remove_unused_columns(train_dataset, description="training")
-
-    #     if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
-    #         if self.args.world_size > 1:
-    #             train_dataset = MyIterableDatasetShard(
-    #                 train_dataset,
-    #                 real_batch_size=self.real_batch_size,
-    #                 batch_size=self.args.train_batch_size,
-    #                 drop_last=self.args.dataloader_drop_last,
-    #                 num_processes=self.args.world_size,
-    #                 process_index=self.args.process_index,
-    #             )
-
-    #         return DataLoader(
-    #             train_dataset,
-    #             batch_size=self.args.train_batch_size,
-    #             collate_fn=self.data_collator,
-    #             num_workers=self.args.dataloader_num_workers,
-    #             pin_memory=self.args.dataloader_pin_memory,
-    #         )
-
-    #     train_sampler = self._get_train_sampler()
-
-    #     return DataLoader(
-    #         train_dataset,
-    #         batch_size=self.args.train_batch_size,
-    #         sampler=train_sampler,
-    #         collate_fn=self.data_collator,
-    #         drop_last=self.args.dataloader_drop_last,
-    #         num_workers=self.args.dataloader_num_workers,
-    #         pin_memory=self.args.dataloader_pin_memory,
-    #     )
-
+    
     # override class of Trainer
     def log(self, logs: Dict[str, float]) -> None:
         """
