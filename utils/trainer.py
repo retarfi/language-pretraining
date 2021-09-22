@@ -154,13 +154,14 @@ class MyTrainer(Trainer):
         mylogs["current_time"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
         td = datetime.timedelta(seconds=time.time()-self.start_time)
         def seconds_to_str_time(seconds):
-            mm, ss = divmod(seconds, 60)
+            days = seconds // 86400
+            mm, ss = divmod(seconds % 86400, 60)
             hh, mm = divmod(mm, 60)
             str_time = "%d:%02d:%02d" % (hh, mm, ss)
-            if td.days:
+            if days > 0:
                 def plural(n):
                     return n, abs(n) != 1 and "s" or ""
-                str_time = ("%d day%s, " % plural(td.days)) + elapsed_time
+                str_time = ("%d day%s, " % plural(days)) + str_time
             return str_time
         mylogs["elapsed_time"] = seconds_to_str_time(td.seconds)
 
