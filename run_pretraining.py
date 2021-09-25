@@ -198,6 +198,7 @@ def run_pretraining(
         #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
+        gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps'],
         dataloader_num_workers = 3,
         dataloader_pin_memory=False,
         local_rank = local_rank,
