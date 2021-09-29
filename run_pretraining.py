@@ -180,7 +180,6 @@ def run_pretraining(
         do_train = True,
         do_eval = False, # default
         per_device_train_batch_size = per_device_train_batch_size,
-        gradient_accumulation_steps = 1, # default
         learning_rate = param_config['learning-rate'], 
         adam_beta1 = 0.9, # same as BERT paper
         adam_beta2 = 0.999, # same as BERT paper
