@@ -1,10 +1,53 @@
-# language-pretraining
+# BERT and ELECTRA Models for Japanese
 
-## Train Tokenizer
+This is a repository of pretrained Japapanese BERT and ELECTRA models.
+The models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab)
+BERT-small, ELECTRA-small and ELECTRA-small-paper models trained by wikipedia or financial dataset is available in this url.
+BERT-base model trained by financial dataset will be available in the future.
+
+## Model Architecture
+The architecture of BERT-small and ELECTRA-small-paper models are the same as those in [the original ELECTRA paper](https://arxiv.org/abs/2003.10555) (ELECTRA-small-paper is described as ELECTRA-small in the paper).
+The architecture of ELECTRA-small is the same as that in [the ELECTRA implementation by Google](https://github.com/google-research/electra).
+
+| Parameter | BERT-small | ELECTRA-small | ELECTRA-small-paper |
+| :---: | :---: | :---: | :---: |
+| Number of layers | 12 | 12 | 12 |
+| Hidden Size | 256 | 256 | 256 |
+| Attention Heads | 4 | 4 | 4 |
+| Generator Size | - | 1/1 | 1/4 |
+| Train Steps | 1.45M | 1M | 1M |
+
+Other models such as BERT-base or ELECTRA-base are also available in this implementation.
+You can also add your original parameters in parameter.json.
+
+
+## Training Data
+Training data are aggregated to a text file.
+Each sentence in one line and a blank line is inserted between documents.
+
+### Wikipedia Model
+The normal models (not financial models) are trained on the Japanese version of Wikipedia, using [Wikipedia dump](https://dumps.wikimedia.org/jawiki/) file as of June 1, 2021.
+The corpus file is 2.9GB, consisting of approximately 20M sentences.
+
+### Financial Model
+The financial models are trained on Wikipedia corpus and financial corpus.
+The Wikipedia corpus is the same as described above.
+The financial corpus consists of 2 corpus:
+- Summaries of financial results from October 9, 2012 to December 31, 2020
+- Securities reports from February 8, 2018 to December 31, 2020
+The financial corpus file is 5.2GB, consisting of approximately 27M sentences.
+
+## Usage
+### Train Tokenizer
+In our pretrained models, the texts are first tokenized by [MeCab](https://taku910.github.io/mecab/) with [IPAdic](https://pypi.org/project/ipadic/) dictionary and then split into subwords by the WordPiece algorithm.
+For MeCab dictionary, [unidic](https://github.com/polm/unidic-lite) and unidic-lite are also available.
+[Sentencepiece](https://github.com/google/sentencepiece) is also available for subword alogorithm, but we do not validate performance.
+
+
 ```
-python train_tokenizer.py \
---input_file ./share/corpus.txt \
---model_dir ./share/tokenizer \
+$ python train_tokenizer.py \
+--input_file corpus.txt \
+--model_dir tokenizer/ \
 --intermediate_dir ./data/corpus_split/ \
 --num_files 20 \
 --mecab_dic_type ipadic \
@@ -14,15 +57,54 @@ python train_tokenizer.py \
 --limit_alphabet 6129 \
 --num_unused_tokens 10 
 ```
-- `intermediate_dir`は中間生成ファイルのディレクトリを指定
-- `num_files`は並列処理の分割数(これにより中間生成ファイルの数も決まる)を指定 推奨はマシンのスレッド数
-- `limit_alphabet`は1文字の語彙数を指定(defaultは東北大BERTと同じ)
-- `num_unused_tokens`はファインチューニング時に追加できる空きの語彙数を指定(defaultは東北大BERTと同じ)
 
-## Pretraining
-1 nodeで行う場合:
+
+### Training
+
+Distributed training is available.
+For run command, please see the [PyTorch document](https://pytorch.org/docs/stable/distributed.html#launch-utility) in detail.
+In official PyTorch implementation, different batch size between nodes is not available.
+We improved PyTorch sampling implementation (utils/trainer_pt_utils.py).
+
+For example, `bert-base-dist` model is defined in parameter.json:
 ```
-python run_pretraining.py \
+"bert-base-dist" : {
+    "number-of-layers" : 12,
+    "hidden-size" : 768,
+    "sequence-length" : 512,
+    "ffn-inner-hidden-size" : 3072,
+    "attention-heads" : 12,
+    "warmup-steps" : 10000,
+    "learning-rate" : 1e-4,
+    "batch-size" : {
+        "0" : 80,
+        "1" : 80,
+        "2" : 48,
+        "3" : 48
+    },
+    "train-steps" : 1000000,
+    "save-steps" : 50000,
+    "logging-steps" : 5000
+}
+```
+In this case, node 0 and node 1 have 80 batch sizes and node 2 and node 3 have 48 respectively.
+If node 0 have 2 gpus, each gpu have 40 batch size.
+**10G or higher network speed** is recommended for training with multi-nodes.
+
+`fp16_type` argument specifies which precision mode to use:
+
+- 0: FP32 training
+- 1: Mixed Precision
+- 2: "Almost FP16" Mixed Precision
+- 3: FP16 training
+
+In detail, please see [NVIDIA Apex document](https://nvidia.github.io/apex/amp.html).
+
+whole word masking option is also available.
+
+```
+# Train with 1 node
+$ python run_pretraining.py \
 --input_file ./share/corpus.txt \
 --tokenizer_dir ./share/tokenizer/ \
 --model_dir ./model/bert/ \
@@ -31,14 +113,12 @@ python run_pretraining.py \
 --fp16_type 0 \
 --tokenizer_type wordpiece \
 --mecab_dic_type ipadic \
---do_whole_word_mask \
+(--do_whole_word_mask \)
 (--do_continue \)
 (--disable_overwrite_cache)
-```
 
-multi nodeで行う場合:
-```
-NCCL_SOCKET_IFNAME=hoge CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
+# Train with multi-node and multi-process
+$ NCCL_SOCKET_IFNAME=eno1 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 --nproc_per_node=2 --nnodes=2 --node_rank=0 --master_addr="10.0.0.1" \
 --master_port=50916 run_pretraining.py \
 --input_file ./share/corpus.txt \
@@ -51,25 +131,18 @@ NCCL_SOCKET_IFNAME=hoge CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.lau
 --mecab_dic_type ipadic \
 --node_rank 0 \
 --local_rank 0 \
---do_whole_word_mask \
+(--do_whole_word_mask \)
 (--do_continue \)
 (--disable_overwrite_cache)
 ```
 
-- `model_type`はparameter.json内にあるモデルの種類を指定
-- `fp16_type`はAoex AMPのoptimization levelを指定する(詳細はhttps://nvidia.github.io/apex/amp.html参照)
-- `do_continue`は途中から学習を継続したい場合に指定
-- `disable_overwrite_cache`は学習を継続したい場合に再度学習データのcacheを作成しなおさない場合に指定
-- `NCCL_SOCKET_IFNAME`はNICのカードを指定する
-- `CUDA_VISIBLE_DEVICES`は使うGPUを指定する(指定しない場合は全てのGPUに分配される)
-- `node_rank`は各ノードの順位を指定する(3台なら0,1,2)
-- `local_rank`は各ノードにおけるプロセス順位(1ノードにつき1プロセスなら0)
-
 
 ### ELECTRA
-run_pretraining.pyによって生成されるモデルは、GeneratorとDiscriminatorの両方が含まれるため、分離することが必要。
+ELECTRA models generated by run_pretraining.py contains both generator and discriminator.
+For general use, separation is needed.
+
 ```
-python extract_electra_model.py \
+$ python extract_electra_model.py \
 --input_dir ./model/electra/checkpoint-1000000 \
 --output_dir ./model/electra/extracted-1000000 \
 --parameter_file parameter.json \
@@ -78,29 +151,53 @@ python extract_electra_model.py \
 --discriminator
 ```
 
-この場合、./model/electra/extracted-1000000/generator/にgeneratorモデルが、./model/electra/extracted-1000000/discriminator/にdiscriminatorモデルが保存される
+In this example, the generator model is saved in `./model/electra/extracted-1000000/generator/` and discriminator model is saved in `./model/electra/extracted-1000000/discriminator/` respectively.
+
+### Training Log
+Tensorboard is available for training log.
+
+## Citation
+### Pretrained Model
+**There will be another paper for this pretrained model.
+Be sure to check here again when you cite.**
+```
+@inproceedings{bert_electra_japanese,
+  title = {Construction and Validation of a Pre-Trained Language Model
+Using Financial Documents}
+  author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
+  month = {oct},
+  year = {2021},
+  booktitle = {"Proceedings of JSAI Special Interest Group on Financial Infomatics (SIG-FIN) 27"}
+}
+```
+
+### This Implementation
+```
+@misc{bert_electra_japanese,
+  author = {Masahiro Suzuki},
+  title = {BERT and ELECTRA Models for Japanese},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/retarfi/language-pretraining}}
+}
+```
 
 
-## parameter.json
-### batch_sizeについて
-single nodeの場合: keyを-1、valueにバッチサイズを指定
-```
-"batch-size" : {"-1" : 128},
-```
+## Licenses
+The pretrained models are distributed under the terms of the [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
-multi nodeの場合、run_pretraining.pyの`--node_rank`に対応するノード番号ごとにバッチサイズを指定
-```
-"batch-size" : {
-    "0" : 100,
-    "1" : 100,
-    "2" : 56
-},
-```
+The codes in this repository are distributed under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
 
 
+## Related Work
+- Original BERT model by Google Research Team
+    - https://github.com/google-research/bert
+- Original ELECTRA model by Google Research Team
+    - https://github.com/google-research/electra
+- ELECTRA training with PyTorch implementation
+    - Author: Richard Wang
+    - https://github.com/richarddwang/electra_pytorch
 
-## Tensorboard
-```
-tensorboard --logdir ./runs/
-```
-で実行される
+## Acknowledgement
+This work was supported by JSPS KAKENHI Grant Number JP21K12010. 
