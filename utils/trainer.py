@@ -163,10 +163,10 @@ class MyTrainer(Trainer):
                     return n, abs(n) != 1 and "s" or ""
                 str_time = ("%d day%s, " % plural(days)) + str_time
             return str_time
-        mylogs["elapsed_time"] = seconds_to_str_time(td.seconds)
+        mylogs["elapsed_time"] = seconds_to_str_time(td.total_seconds())
 
         if self.args.max_steps > 0:
-            mylogs["remaining_time"] = seconds_to_str_time(td.seconds * (self.args.max_steps - self.state.global_step) / self.state.global_step)
+            mylogs["remaining_time"] = seconds_to_str_time(td.total_seconds() * (self.args.max_steps - self.state.global_step) / self.state.global_step)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, mylogs)
 
     def create_optimizer(self):

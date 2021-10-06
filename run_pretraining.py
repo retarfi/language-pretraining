@@ -180,7 +180,6 @@ def run_pretraining(
         do_train = True,
         do_eval = False, # default
         per_device_train_batch_size = per_device_train_batch_size,
-        gradient_accumulation_steps = 1, # default
         learning_rate = param_config['learning-rate'], 
         adam_beta1 = 0.9, # same as BERT paper
         adam_beta2 = 0.999, # same as BERT paper
@@ -198,6 +197,7 @@ def run_pretraining(
         #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
+        gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps'],
         dataloader_num_workers = 3,
         dataloader_pin_memory=False,
         local_rank = local_rank,
