@@ -33,8 +33,10 @@ The corpus file is 2.9GB, consisting of approximately 20M sentences.
 The financial models are trained on Wikipedia corpus and financial corpus.
 The Wikipedia corpus is the same as described above.
 The financial corpus consists of 2 corpora:
+
 - Summaries of financial results from October 9, 2012, to December 31, 2020
 - Securities reports from February 8, 2018, to December 31, 2020
+
 The financial corpus file is 5.2GB, consisting of approximately 27M sentences.
 
 ## Usage
