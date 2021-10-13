@@ -220,6 +220,7 @@ class MyTrainer(Trainer):
             self,
             resume_from_checkpoint: Optional[Union[str, bool]] = None,
             trial: Union["optuna.Trial", Dict[str, Any]] = None,
+            do_log_loss_gen_disc: bool = False,
             **kwargs,
         ):
         """
@@ -232,6 +233,8 @@ class MyTrainer(Trainer):
                 training will resume from the model/optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
+            do_log_loss_gen_disc (:obj:`bool`):
+                Bool wheter log losses of generator and discriminator for electra, adding to total loss.
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
@@ -443,6 +446,12 @@ class MyTrainer(Trainer):
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(args.device)
+        '''THIS IS CHANGED'''
+        self.do_log_loss_gen_disc = do_log_loss_gen_disc
+        if self.do_log_loss_gen_disc:
+            tr_loss_gen, tr_loss_disc = torch.tensor(0.0).to(args.device), torch.tensor(0.0).to(args.device)
+        else:
+            tr_loss_gen, tr_loss_disc = None, None
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
@@ -502,9 +511,19 @@ class MyTrainer(Trainer):
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
+                        '''THIS IS CHANGED '''
+                        tr_loss_step, tr_loss_gen_step, tr_loss_disc_step = self.training_step(model, inputs)
+                        tr_loss += tr_loss_step
+                        if self.do_log_loss_gen_disc:
+                            tr_loss_gen += tr_loss_gen_step
+                            tr_loss_disc += tr_loss_disc_step
                 else:
-                    tr_loss += self.training_step(model, inputs)
+                    '''THIS IS CHANGED '''
+                    tr_loss_step, tr_loss_gen_step, tr_loss_disc_step = self.training_step(model, inputs)
+                    tr_loss += tr_loss_step
+                    if self.do_log_loss_gen_disc:
+                        tr_loss_gen += tr_loss_gen_step
+                        tr_loss_disc += tr_loss_disc_step
                 self.current_flos += float(self.floating_point_ops(inputs))
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
@@ -560,13 +579,15 @@ class MyTrainer(Trainer):
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
-                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
+                    '''THIS IS CHANGED '''
+                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, tr_loss_gen, tr_loss_disc)
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
+            '''THIS IS CHANGED '''
+            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, tr_loss_gen, tr_loss_disc)
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_tpu_available():
@@ -636,6 +657,115 @@ class MyTrainer(Trainer):
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
+    # override to log electra's generator and discriminator losses
+    def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, tr_loss_gen, tr_loss_disc):
+        if self.control.should_log:
+            logs: Dict[str, float] = {}
+            tr_loss_scalar = tr_loss.item()
+            # reset tr_loss to zero
+            tr_loss -= tr_loss
+            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            if self.do_log_loss_gen_disc:
+                tr_loss_gen_scalar = tr_loss_gen.item()
+                # reset tr_loss_gen to zero
+                tr_loss_gen -= tr_loss_gen
+                logs["gen_loss"] = round(tr_loss_gen_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+                tr_loss_disc_scalar = tr_loss_disc.item()
+                # reset tr_loss_disc to zero
+                tr_loss_disc -= tr_loss_disc
+                logs["dis_loss"] = round(tr_loss_disc_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["learning_rate"] = self._get_learning_rate()
+            self._total_loss_scalar += tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
+            self.store_flos()
+
+            self.log(logs)
+
+    # override to log electra's generator and discriminator losses
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Perform a training step on a batch of inputs.
+        Subclass and override to inject custom behavior.
+        Args:
+            model (:obj:`nn.Module`):
+                The model to train.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+        Return:
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+            :obj:`torch.Tensor or None`: The tensor with training generator loss on this batch or NoneType.
+            :obj:`torch.Tensor or None`: The tensor with training discriminator loss on this batch or NoneType.
+        """
+        gen_loss, disc_loss = None, None
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        if is_sagemaker_mp_enabled():
+            scaler = self.scaler if self.use_amp else None
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps, scaler=scaler)
+            return loss_mb.reduce_mean().detach().to(self.args.device)
+
+        if self.use_amp:
+            with autocast():
+                loss, gen_loss, disc_loss = self.compute_loss(model, inputs)
+        else:
+            loss, gen_loss, disc_loss = self.compute_loss(model, inputs)
+
+        if self.args.n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu parallel training
+            if self.do_log_loss_gen_disc:
+                gen_loss = gen_loss.mean()
+                disc_loss = disc_loss.mean()
+
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
+            loss = loss / self.args.gradient_accumulation_steps
+            if self.do_log_loss_gen_disc:
+                gen_loss = gen_loss / self.args.gradient_accumulation_steps
+                disc_loss = disc_loss / self.args.gradient_accumulation_steps
+
+        if self.use_amp:
+            self.scaler.scale(loss).backward()
+        elif self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        elif self.deepspeed:
+            # loss gets scaled under gradient_accumulation_steps in deepspeed
+            loss = self.deepspeed.backward(loss)
+        else:
+            loss.backward()
+
+        return (loss.detach(), gen_loss, disc_loss)
+
+    # override to log electra's generator and discriminator losses
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+        Subclass and override for custom behavior.
+        """
+        gen_loss, disc_loss = None, None
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
+        outputs = model(**inputs)
+        # Save past state if it exists
+        # TODO: this needs to be fixed and made cleaner later.
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+
+        if labels is not None:
+            loss = self.label_smoother(outputs, labels)
+        else:
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+            if self.do_log_loss_gen_disc:
+                gen_loss = outputs["gen_loss"] if isinstance(outputs, dict) else outputs[1]
+                disc_loss = outputs["disc_loss"] if isinstance(outputs, dict) else outputs[2]
+
+        return (loss, gen_loss, disc_loss, outputs) if return_outputs else (loss, gen_loss, disc_loss)
 
 def get_reporting_integration_callbacks(report_to):
     for integration in report_to:
@@ -644,4 +774,3 @@ def get_reporting_integration_callbacks(report_to):
                 f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
             )
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]
-

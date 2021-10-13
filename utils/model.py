@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -9,6 +12,41 @@ from transformers import (
     Trainer
 )
 from transformers.models.electra.modeling_electra import ElectraForPreTrainingOutput
+from transformers.file_utils import ModelOutput
+
+@dataclass
+class MyElectraForPreTrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ElectraForPreTraining`.
+
+    Args:
+        loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            Total loss of the ELECTRA objective.
+        gen_loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            Generator loss of the ELECTRA objective.
+        disc_loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            Discriminator loss of the ELECTRA objective.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Prediction scores of the head (scores for each token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    gen_loss: Optional[torch.FloatTensor] = None
+    disc_loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 class ElectraForPretrainingModel(ElectraPreTrainedModel):
     def __init__(self, config_generator, config_discriminator, loss_weights=(1.0,50.0)):
@@ -74,14 +112,16 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         if not return_dict:
             loss_disc = outputs_disc[0]
             total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
-            return ((total_loss,) + outputs_disc[1:]) if total_loss is not None else outputs_disc
+            return ((total_loss, loss_gen.detach(), loss_disc.detach()) + outputs_disc[1:]) if total_loss is not None else outputs_disc
 
         loss_disc = outputs_disc.loss
         if torch.isnan(loss_disc):
             raise ValueError('loss_disc is NaN')
         total_loss = self.loss_weights[0] * loss_gen + self.loss_weights[1] * loss_disc
-        return ElectraForPreTrainingOutput(
+        return MyElectraForPreTrainingOutput(
             loss=total_loss,
+            gen_loss=loss_gen.detach(),
+            disc_loss=loss_disc.detach(),
             logits=outputs_disc.logits,
             hidden_states=outputs_disc.hidden_states,
             attentions=outputs_disc.attentions,

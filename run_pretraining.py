@@ -267,7 +267,10 @@ def run_pretraining(
 
     logger.info('Pretraining starts.')
     resume_from_checkpoint = True if do_continue else None
-    trainoutput = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    trainoutput = trainer.train(
+        resume_from_checkpoint=resume_from_checkpoint,
+        do_log_loss_gen_disc=bool(model_name == 'electra')
+    )
 
 
 if __name__ == "__main__":
