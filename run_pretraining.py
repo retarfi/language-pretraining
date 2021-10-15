@@ -31,10 +31,10 @@ assert any(v in torch.__version__ for v in ['1.8.0', '1.8.1', '1.8.2', '1.9.0'])
 assert transformers.__version__ in ['4.7.0'], f'This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}'
 
 
-def load_tokenizer(tokenizer_dir:str, max_length:int,
-                   tokenizer_type:str,
-                   mecab_dic_type:str,
-                   ) -> transformers.tokenization_utils_base.PreTrainedTokenizerBase:
+def load_tokenizer(
+        tokenizer_dir:str, tokenizer_type:str,
+        language:str, max_length:int, mecab_dic_type:str,
+    ) -> transformers.tokenization_utils_base.PreTrainedTokenizerBase:
     # load tokenizer
     if tokenizer_type=='sentencepiece':
         tokenizer = SentencePieceBPETokenizer(
@@ -66,15 +66,21 @@ def load_tokenizer(tokenizer_dir:str, max_length:int,
             mask_token = "[MASK]",
         )
     elif tokenizer_type=='wordpiece':
-        tokenizer = transformers.BertJapaneseTokenizer(
-            os.path.join(tokenizer_dir, "vocab.txt"),
-            do_lower_case = False,
-            word_tokenizer_type = "mecab",
-            subword_tokenizer_type = "wordpiece",
-            tokenize_chinese_chars = False,
-            mecab_kwargs = {'mecab_dic': mecab_dic_type},
-            model_max_length = max_length
-        )
+        if language == 'ja':
+            tokenizer = transformers.BertJapaneseTokenizer(
+                os.path.join(tokenizer_dir, "vocab.txt"),
+                do_lower_case = False,
+                word_tokenizer_type = "mecab",
+                subword_tokenizer_type = "wordpiece",
+                tokenize_chinese_chars = False,
+                mecab_kwargs = {'mecab_dic': mecab_dic_type},
+                model_max_length = max_length
+            )
+        elif language == 'en':
+            # Only for debug
+            tokenizer = transformers.AutoTokenizer.from_pretrained('bert-base-uncased')
+        else:
+            raise ValueError(f'Invalid language {language}')
     else:
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')
 
@@ -84,18 +90,30 @@ def load_tokenizer(tokenizer_dir:str, max_length:int,
 def make_dataset_model_bert(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
+        language:str,
         param_config:dict,
         overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
-
-    dataset = utils.TextDatasetForNextSentencePrediction(
-        tokenizer = tokenizer, 
-        file_path = input_file, 
-        overwrite_cache = overwrite_cache,
-        block_size = param_config['sequence-length'],
-        short_seq_probability = 0.1, # default
-        nsp_probability = 0.5, # default
-    )
+    if language == 'ja':
+        dataset = utils.TextDatasetForNextSentencePrediction(
+            tokenizer = tokenizer, 
+            file_path = input_file, 
+            overwrite_cache = overwrite_cache,
+            block_size = param_config['sequence-length'],
+            short_seq_probability = 0.1, # default
+            nsp_probability = 0.5, # default
+        )
+    elif language == 'en':
+        directory, corpus_name = os.path.split(input_file)
+        dataset = utils.HFTextDatasetForNextSentencePrediction(
+            tokenizer = tokenizer, 
+            corpus_name = corpus_name, 
+            directory = directory,
+            overwrite_cache = overwrite_cache,
+            block_size = param_config['sequence-length'],
+            short_seq_probability = 0.1, # default
+            nsp_probability = 0.5, # default
+        )
     bert_config = BertConfig(
         vocab_size = tokenizer.vocab_size, 
         hidden_size = param_config['hidden-size'], 
@@ -112,16 +130,29 @@ def make_dataset_model_bert(
 def make_dataset_model_electra(
         tokenizer:transformers.tokenization_utils_base.PreTrainedTokenizerBase,
         input_file:str,
+        language:str,
         param_config:dict,
         overwrite_cache:bool,
     ) -> Tuple[Dataset, PreTrainedModel]:
 
-    dataset = utils.LineByLineTextDataset(
-        tokenizer = tokenizer, 
-        file_path = input_file, 
-        overwrite_cache = overwrite_cache,
-        block_size = param_config['sequence-length'],
-    )
+    if language == 'ja':
+        dataset = utils.LineByLineTextDataset(
+            tokenizer = tokenizer, 
+            file_path = input_file, 
+            overwrite_cache = overwrite_cache,
+            block_size = param_config['sequence-length'],
+        )
+    elif language == 'en':
+        directory, corpus_name = os.path.split(input_file)
+        dataset = utils.HFLineByLineTextDataset(
+            tokenizer = tokenizer, 
+            corpus_name = corpus_name, 
+            directory = directory,
+            overwrite_cache = overwrite_cache,
+            block_size = param_config['sequence-length'],
+            short_seq_probability = 0.1, # default
+            nsp_probability = 0.5, # default
+        )
     frac_generator = Fraction(param_config['generator-size'])
     config_generator = ElectraConfig(
         vocab_size = tokenizer.vocab_size, 
@@ -152,6 +183,7 @@ def run_pretraining(
         input_file:str,
         model_name:str,
         model_dir:str,
+        language:str,
         fp16_type:int,
         param_config:dict,
         do_whole_word_mask:bool,
@@ -213,9 +245,9 @@ def run_pretraining(
 
     # dataset and model
     if model_name == 'bert':
-        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, param_config, overwrite_cache)
+        train_dataset, model = make_dataset_model_bert(tokenizer, input_file, language, param_config, overwrite_cache)
     elif model_name == 'electra':
-        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, param_config, overwrite_cache)
+        train_dataset, model = make_dataset_model_electra(tokenizer, input_file, language, param_config, overwrite_cache)
     logger.info('Dataset was complete.')
 
     # data collator
@@ -281,6 +313,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_dir', type=str, required=True)
     parser.add_argument('--parameter_file', type=str, required=True)
     parser.add_argument('--model_type', type=str, required=True)
+    parser.add_argument('--language', type=str, default='ja', choices=['ja', 'en'])
     parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
                                         help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
     parser.add_argument('--tokenizer_type', type=str, choices=['sentencepiece', 'wordpiece'])
@@ -330,11 +363,16 @@ if __name__ == "__main__":
     if str(args.local_rank) not in param_config['batch-size'].keys():
         raise ValueError(f'local_rank {args.local_rank} is not defined in batch-size of parameter_file')
     logger.info(f'Config[{args.model_type}] is loaded')
+    if args.language == 'en':
+        directory, corpus_name = os.path.split(args.input_file)
+        assert corpus_name in ['openwebtext', 'wikipedia'], f'input_file must contain "openwebtext" or "wikipedia", but got {corpus_name}'
+        logger.info(f'corpus_name: {corpus_name}, cached_dir: {directory}')
     
     # tokenizer
     tokenizer = load_tokenizer(
         tokenizer_dir = args.tokenizer_dir,
         tokenizer_type = args.tokenizer_type,
+        language = args.language,
         max_length = param_config['sequence-length'],
         mecab_dic_type = args.mecab_dic_type,
     )
@@ -343,6 +381,7 @@ if __name__ == "__main__":
         input_file = args.input_file,
         model_name = model_name,
         model_dir = args.model_dir,
+        language = args.language,
         fp16_type = args.fp16_type,
         param_config = param_config,
         do_whole_word_mask = args.do_whole_word_mask,

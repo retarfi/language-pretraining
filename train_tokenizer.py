@@ -63,6 +63,7 @@ def train_tokenizer(
         limit_alphabet:int,
         num_unused_tokens:int,
         tokenizer_type:str,
+        language:str
     ) -> None:
 
     if os.path.isfile(input_file_or_dir):
@@ -89,11 +90,18 @@ def train_tokenizer(
             # )
         ])
     elif tokenizer_type=='wordpiece':
-        tokenizer = BertWordPieceTokenizer(
-            handle_chinese_chars=False,
-            strip_accents=False,
-            lowercase=False
-        )
+        if language == 'ja':
+            tokenizer = BertWordPieceTokenizer(
+                handle_chinese_chars=False,
+                strip_accents=False,
+                lowercase=False
+            )
+        elif language == 'en':
+                tokenizer = BertWordPieceTokenizer(
+                handle_chinese_chars=True,
+                strip_accents=None, # determined by the value for lowercase
+                lowercase=True
+            )
     else:
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')    
 
@@ -119,6 +127,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', required=True, type=str)
     parser.add_argument('--model_dir', required=True, type=str)
+    parser.add_argument('--language', type=str, default='ja', choices=['ja', 'en'])
     # split option
     parser.add_argument('--intermediate_dir', type=str, default='')
     parser.add_argument('--num_files', type=int, default=1)
@@ -150,54 +159,57 @@ if __name__ == "__main__":
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
-    # split
-    if args.num_files > 1:
-        logger.info('Splitting...')
-        line_all = int(subprocess.run(['wc', '-l', args.input_file], encoding='utf-8', stdout=subprocess.PIPE).stdout.split()[0])
-        intermediate_plib_dir = pathlib.Path(args.intermediate_dir)
-        line_per_file = line_all // args.num_files
-        # pbar = tqdm(total=args.num_files)
-        cnt_file, cnt_line = 0, 0
-        os.makedirs(args.intermediate_dir, exist_ok=True)
-        with open(args.input_file, 'r') as infile:
-            f = open((intermediate_plib_dir / f'{cnt_file}.txt').resolve(), 'w')
-            for line in infile:
-                if cnt_line >= line_per_file and line == '\n':
-                    f.write('\n')
-                    f.close()
-                    # pbar.update(1)
-                    cnt_file += 1
-                    f = open((intermediate_plib_dir / f'{cnt_file}.txt').resolve(), 'w')
-                    cnt_line = 0
-                else:
-                    f.write(line)
-                    cnt_line += 1
-            f.close()
-            # pbar.update(1)
-            # pbar.close()
-        
-    # pre-tokenize
-    logger.info('Pre-tokenizing...')
-    if args.num_files == 1:
-        input_plib_file = pathlib.Path(args.input_file)
-        pretokenized_plib_file = input_plib_file.parent.joinpath(input_plib_file.stem + args.pretokenized_prefix + '.txt')
-        mp_tokenize(str(input_plib_file), str(pretokenized_plib_file), args.mecab_dic_type, args.mecab_option, 0)
-        logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_file)}')
+    if args.language == 'ja':
+        # split
+        if args.num_files > 1:
+            logger.info('Splitting...')
+            line_all = int(subprocess.run(['wc', '-l', args.input_file], encoding='utf-8', stdout=subprocess.PIPE).stdout.split()[0])
+            intermediate_plib_dir = pathlib.Path(args.intermediate_dir)
+            line_per_file = line_all // args.num_files
+            # pbar = tqdm(total=args.num_files)
+            cnt_file, cnt_line = 0, 0
+            os.makedirs(args.intermediate_dir, exist_ok=True)
+            with open(args.input_file, 'r') as infile:
+                f = open((intermediate_plib_dir / f'{cnt_file}.txt').resolve(), 'w')
+                for line in infile:
+                    if cnt_line >= line_per_file and line == '\n':
+                        f.write('\n')
+                        f.close()
+                        # pbar.update(1)
+                        cnt_file += 1
+                        f = open((intermediate_plib_dir / f'{cnt_file}.txt').resolve(), 'w')
+                        cnt_line = 0
+                    else:
+                        f.write(line)
+                        cnt_line += 1
+                f.close()
+                # pbar.update(1)
+                # pbar.close()
+            
+        # pre-tokenize
+        logger.info('Pre-tokenizing...')
+        if args.num_files == 1:
+            input_plib_file = pathlib.Path(args.input_file)
+            pretokenized_plib_file = input_plib_file.parent.joinpath(input_plib_file.stem + args.pretokenized_prefix + '.txt')
+            mp_tokenize(str(input_plib_file), str(pretokenized_plib_file), args.mecab_dic_type, args.mecab_option, 0)
+            logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_file)}')
+            input_file_or_dir = str(pretokenized_plib_file)
+        else:
+            pretokenized_plib_dir = intermediate_plib_dir.parent.joinpath(intermediate_plib_dir.stem + args.pretokenized_prefix)
+            os.makedirs(pretokenized_plib_dir, exist_ok=True)
+            with mp.Pool(args.num_files) as pool:
+                mp_task = [pool.apply_async(mp_tokenize, (
+                    str((intermediate_plib_dir / f'{i}.txt').resolve()),
+                    str((pretokenized_plib_dir / f'{i}.txt').resolve()),
+                    args.mecab_dic_type, args.mecab_option, i
+                )) for i in range(cnt_file+1)]
+                _ = [f.get() for f in mp_task]
+            logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_dir)}')
+            input_file_or_dir = str(pretokenized_plib_dir)
     else:
-        pretokenized_plib_dir = intermediate_plib_dir.parent.joinpath(intermediate_plib_dir.stem + args.pretokenized_prefix)
-        os.makedirs(pretokenized_plib_dir, exist_ok=True)
-        with mp.Pool(args.num_files) as pool:
-            mp_task = [pool.apply_async(mp_tokenize, (
-                str((intermediate_plib_dir / f'{i}.txt').resolve()),
-                str((pretokenized_plib_dir / f'{i}.txt').resolve()),
-                args.mecab_dic_type, args.mecab_option, i
-            )) for i in range(cnt_file+1)]
-            _ = [f.get() for f in mp_task]
-        logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_dir)}')
-       
+        input_file_or_dir = args.input_file       
 
     # train tokenizer
-    input_file_or_dir = str(pretokenized_plib_dir) if args.num_files > 1 else str(pretokenized_plib_file)
     train_tokenizer(
         input_file_or_dir = input_file_or_dir,
         output_dir = args.model_dir,
@@ -206,4 +218,5 @@ if __name__ == "__main__":
         limit_alphabet = args.limit_alphabet,
         num_unused_tokens = args.num_unused_tokens,
         tokenizer_type = args.tokenizer_type,
+        language = args.language
     )
