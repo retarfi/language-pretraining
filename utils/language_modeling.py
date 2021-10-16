@@ -287,7 +287,7 @@ class LineByLineTextDataset(AbstractDataset):
 def create_examples_from_document_for_lbl(self, document: List[np.ndarray], doc_index: int, block_size: int):
     """Creates examples for a single document."""
 
-    max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
+    max_num_tokens = block_size - self.tokenizer.num_special_tokens_to_add(pair=False)
 
     # We *usually* want to fill up the entire sequence since we are padding
     # to `block_size` anyways, so short sequences are generally wasted
@@ -312,42 +312,28 @@ def create_examples_from_document_for_lbl(self, document: List[np.ndarray], doc_
             if current_chunk:
                 # `a_end` is how many segments from `current_chunk` go into the `A`
                 # (first) sentence.
-                a_end = 1
-                if len(current_chunk) >= 2:
-                    a_end = random.randint(1, len(current_chunk) - 1)
+                tokens = []
+                for tk in current_chunk:
+                    tokens.extend(tk)
 
-                tokens_a = []
-                for j in range(a_end):
-                    tokens_a.extend(current_chunk[j])
+                """Truncates a pair of sequences to a maximum sequence length."""
+                while True:
+                    total_length = len(tokens)
+                    if total_length <= max_num_tokens:
+                        break
+                    # We want to sometimes truncate from the front and sometimes from the
+                    # back to add more randomness and avoid biases.
+                    if random.random() < 0.5:
+                        del tokens[0]
+                    else:
+                        tokens.pop()
 
-                tokens_b = []
-                for j in range(a_end, len(current_chunk)):
-                    tokens_b.extend(current_chunk[j])
-
-                def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
-                    """Truncates a pair of sequences to a maximum sequence length."""
-                    while True:
-                        total_length = len(tokens_a) + len(tokens_b)
-                        if total_length <= max_num_tokens:
-                            break
-                        trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
-                        assert len(trunc_tokens) >= 1
-                        # We want to sometimes truncate from the front and sometimes from the
-                        # back to add more randomness and avoid biases.
-                        if random.random() < 0.5:
-                            del trunc_tokens[0]
-                        else:
-                            trunc_tokens.pop()
-
-                truncate_seq_pair(tokens_a, tokens_b, max_num_tokens)
-
-                assert len(tokens_a) >= 1
-                assert len(tokens_b) >= 0
+                assert len(tokens) >= 1
 
                 # add special tokens
-                input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens)
                 # add token type ids, 0 for sentence a, 1 for sentence b
-                token_type_ids = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+                token_type_ids = self.tokenizer.create_token_type_ids_from_sequences(tokens)
 
                 # 後でcastする
                 example = {
@@ -393,9 +379,9 @@ class HFAbstractDataset(Dataset):
                 logger.info(f"Creating features from dataset file at {directory}")
                 if corpus_name == "wikipedia":
                     logger.info("wikpedia version: 20200501.en is used")
-                    loaded_dataset = datasets.load_dataset(corpus_name, '20200501.en', cache_dir=directory, split='train[50%:52%]')['text']
+                    loaded_dataset = datasets.load_dataset(corpus_name, '20200501.en', cache_dir=directory, split='train')['text']
                 else:
-                    loaded_dataset = datasets.load_dataset(corpus_name, cache_dir=directory, split='train[50%:52%]')['text']
+                    loaded_dataset = datasets.load_dataset(corpus_name, cache_dir=directory, split='train')['text']
 
                 self.documents = [[]]
                 for d in loaded_dataset:
