@@ -152,7 +152,8 @@ class MyTrainer(Trainer):
         # self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         mylogs["step"] = self.state.global_step
         mylogs["current_time"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-        td = datetime.timedelta(seconds=time.time()-self.start_time)
+        time_now = time.time()
+        td_elapsed = datetime.timedelta(seconds=time_now-self.start_time)
         def seconds_to_str_time(seconds):
             days = seconds // 86400
             mm, ss = divmod(seconds % 86400, 60)
@@ -163,10 +164,12 @@ class MyTrainer(Trainer):
                     return n, abs(n) != 1 and "s" or ""
                 str_time = ("%d day%s, " % plural(days)) + str_time
             return str_time
-        mylogs["elapsed_time"] = seconds_to_str_time(td.total_seconds())
+        mylogs["elapsed_time"] = seconds_to_str_time(td_elapsed.total_seconds())
 
         if self.args.max_steps > 0:
-            mylogs["remaining_time"] = seconds_to_str_time(td.total_seconds() * (self.args.max_steps - self.state.global_step) / self.state.global_step)
+            td_term = datetime.timedelta(seconds=time_now-self.last_log_time)
+            mylogs["remaining_time"] = seconds_to_str_time(td_term.total_seconds() * (self.args.max_steps - self.state.global_step) / self.args.logging_steps)
+        self.last_log_time = time_now
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, mylogs)
 
     def create_optimizer(self):
@@ -401,6 +404,7 @@ class MyTrainer(Trainer):
         START TIME IS ADDED
         '''
         self.start_time = start_time
+        self.last_log_time = start_time
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         steps_trained_progress_bar = None
