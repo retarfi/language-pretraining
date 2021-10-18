@@ -151,7 +151,6 @@ def make_dataset_model_electra(
             overwrite_cache = overwrite_cache,
             block_size = param_config['sequence-length'],
             short_seq_probability = 0.1, # default
-            nsp_probability = 0.5, # default
         )
     frac_generator = Fraction(param_config['generator-size'])
     config_generator = ElectraConfig(
