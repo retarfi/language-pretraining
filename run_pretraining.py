@@ -5,7 +5,7 @@ import json
 import os
 import warnings
 
-from datasets import load_from_disk
+import datasets
 import torch
 from tokenizers import BertWordPieceTokenizer, SentencePieceBPETokenizer, normalizers
 from tokenizers.processors import BertProcessing
@@ -14,9 +14,8 @@ from transformers.data.data_collator import DataCollatorForLanguageModeling
 from transformers import (
     BertConfig,
     BertForPreTraining,
-    check_min_version,
     ElectraConfig,
-    logging
+    logging,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     TrainingArguments
@@ -29,7 +28,9 @@ TrainingArguments._setup_devices = utils._setup_devices
 
 warnings.simplefilter('ignore', UserWarning)
 assert utils.TorchVersion(torch.__version__) >= utils.TorchVersion('1.8.0'), f'This code requires a minimum version of PyTorch of 1.8.0, but the version found is {torch.__version__}'
-assert check_min_version('4.7.0')
+transformers.utils.check_min_version('4.7.0')
+
+logger = transformers.logging.get_logger()
 
 
 def get_model_bert(
@@ -142,16 +143,16 @@ def run_pretraining(
         torch.save(training_args, os.path.join(model_dir, "training_args.bin"))
 
     # dataset
-    dataset = load_from_disk(dataset_dir)
+    dataset = datasets.load_from_disk(dataset_dir)
     dataset.set_format(type='torch')
-    logging.info('Dataset is loaded')
+    logger.info('Dataset is loaded')
 
     # model
     if model_name == 'bert':
         model = get_model_bert(tokenizer, param_config)
     elif model_name == 'electra':
         model = get_model_electra(tokenizer, param_config)
-    logging.info(f'{model_name} mode is loaded')    
+    logger.info(f'{model_name} mode is loaded')    
 
     # data collator
     if model_name == 'bert':
@@ -188,7 +189,7 @@ def run_pretraining(
                 mlm = True,
                 mlm_probability = mlm_probability
             )
-    logging.info('Datacollator was complete.')
+    logger.info('Datacollator was complete.')
     
     trainer = utils.MyTrainer(
         model = model,
@@ -200,7 +201,7 @@ def run_pretraining(
     trainer.batch_config = param_config['batch-size']
     trainer.real_batch_size = sum(param_config['batch-size'].values())
 
-    logging.info('Pretraining starts.')
+    logger.info('Pretraining starts.')
     resume_from_checkpoint = True if do_continue else None
     trainoutput = trainer.train(
         resume_from_checkpoint=resume_from_checkpoint,
@@ -258,7 +259,7 @@ if __name__ == "__main__":
         raise ValueError(f'{set_assert-param_config.keys()} is(are) not in parameter_file')
     if str(args.local_rank) not in param_config['batch-size'].keys():
         raise ValueError(f'local_rank {args.local_rank} is not defined in batch-size of parameter_file')
-    logging.info(f'Config[{args.model_type}] is loaded')
+    logger.info(f'Config[{args.model_type}] is loaded')
     
     tokenizer = utils.load_tokenizer(
         tokenizer_name_or_path = args.tokenizer_name_or_path,
