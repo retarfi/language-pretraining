@@ -1,93 +1,16 @@
 import argparse
-import random
-from typing import Optional, Union
+import copy
+import itertools
 import os
-
+import random
+import re
+from typing import Optional, Union
 
 import datasets
 import torch
-# from torch.utils.data.dataset import Dataset
-from tokenizers import BertWordPieceTokenizer, SentencePieceBPETokenizer, normalizers
-from tokenizers.processors import BertProcessing
-import transformers
-from transformers.data.data_collator import DataCollatorForLanguageModeling
-from transformers import (
-    AutoTokenizer
-    BertJapaneseTokenizer
-)
-from transformers.utils import logging
-
-transformers.logging.set_verbosity_info()
-transformers.logging.enable_explicit_format()
 
 import utils
 
-logging.enable_explicit_format()
-logger = logging.get_logger()
-
-
-def load_tokenizer(
-    tokenizer_name_or_path:str,
-    tokenizer_type:str,
-    mecab_dic_type:str
-) -> transformers.tokenization_utils_base.PreTrainedTokenizerBase:
-
-    if  and os.path.isfile(tokenizer_name_or_path+ "vocab.txt"):
-        tokenizer_name_or_path = os.path.join(tokenizer_name_or_path, "vocab.txt")
-    if os.path.isdir(tokenizer_name_or_path) or os.path.isfile(tokenizer_name_or_path):
-        # load from local file
-        if tokenizer_type=="sentencepiece":
-            if os.path.isdir(tokenizer_name_or_path):
-                tokenizer_dir = tokenizer_name_or_path
-            else:
-                tokenizer_dir = os.path.dirname(tokenizer_name_or_path)
-            tokenizer = SentencePieceBPETokenizer(
-                os.path.join(tokenizer_dir, "vocab.json"),
-                os.path.join(tokenizer_dir, "merges.txt"),
-                unk_token="[UNK]",
-                add_prefix_space=False, # 文頭に自動でスペースを追加しない
-            )
-            # 改行がinput_fileにあるとtokenも改行がついてくるのでstrip
-            # cf. https://github.com/huggingface/tokenizers/issues/231
-            tokenizer.normalizer = normalizers.Sequence([
-                normalizers.Strip(),
-                normalizers.NFKC()
-            ])
-            # post process tokenizer
-            tokenizer._tokenizer.post_processor = BertProcessing(
-                ("[SEP]", tokenizer.token_to_id("[SEP]")),
-                ("[CLS]", tokenizer.token_to_id("[CLS]")),
-            )
-            tokenizer.enable_truncation(max_length = MAX_LENGTH)
-            # convert to transformers style
-            tokenizer = transformers.PreTrainedTokenizerFast(
-                tokenizer_object = tokenizer,
-                model_max_length = MAX_LENGTH,
-                unk_token = "[UNK]",
-                sep_token = "[SEP]",
-                pad_token = "[PAD]",
-                cls_token = "[CLS]",
-                mask_token = "[MASK]",
-            )
-        elif tokenizer_type=="wordpiece":
-            # currently supports only japanese
-            if os.path.isdir(tokenizer_name_or_path):
-                tokenizer_name_or_path = os.path.join(tokenizer_name_or_path, "vocab.txt")
-            tokenizer = transformers.BertJapaneseTokenizer(
-                tokenizer_name_or_path,
-                do_lower_case = False,
-                word_tokenizer_type = "mecab",
-                subword_tokenizer_type = "wordpiece",
-                tokenize_chinese_chars = False,
-                mecab_kwargs = {"mecab_dic": mecab_dic_type},
-                model_max_length = MAX_LENGTH
-            )
-        else:
-            raise ValueError(f"Invalid tokenizer_type {tokenizer_type}.")
-    else:
-        # load from HuggingFace Hub
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
-    return tokenizer
 
 def make_dataset(
     input_corpus:str,
@@ -99,7 +22,7 @@ def make_dataset(
 ) -> Union[torch.utils.data.dataset.Dataset, datasets.dataset_dict.DatasetDict, datasets.arrow_dataset.Dataset, datasets.dataset_dict.IterableDatasetDict, datasets.iterable_dataset.IterableDataset]:
 
     inter_dataset_path = os.path.join(dataset_dir, "inter_" + input_corpus)
-    processed_dataset_path = os.path.join(dataset_dir, f"processed_{dataset_type}_{MAX_LENGTH}_{input_corpus}")
+    processed_dataset_path = os.path.join(dataset_dir, f"{dataset_type}_{MAX_LENGTH}_{input_corpus}")
     
     if os.path.isdir(inter_dataset_path) and not over_write:
         # load sentences
@@ -123,12 +46,9 @@ def make_dataset(
                     for sentence in nltk.sent_tokenize(paragraph):
                         # () is remainder after link in it filtered out
                         sentence = sentence.replace("()","")
-                        if re.sub(r"\s", "", sentence) == "":
-                            continue
-                        documents[-1].append(sentence)
+                        if sentence and re.sub(r"\s", "", sentence) != "":
+                            documents[-1].append(sentence)
                     documents.append([])
-            if documents[-1] == []:
-                documents.pop(-1)
         else:
             with open(input_file, encoding="utf-8") as f:
                 while True:
@@ -139,9 +59,10 @@ def make_dataset(
                     # Empty lines are used as document delimiters
                     if not line and len(documents[-1]) != 0:
                         documents.append([])
-                    documents[-1].append(line)
-            if documents[-1] == []:
-                documents.pop(-1)
+                    if line and re.sub(r"\s", "", line) != "":
+                        documents[-1].append(line)
+        if documents[-1] == []:
+            documents.pop(-1)
         # save intermiediate
         inter_dataset = datasets.Dataset.from_dict({"sentence": documents})
         del documents
@@ -149,28 +70,60 @@ def make_dataset(
         logger.info(f"dataset saved in {inter_dataset_path}")
     
     # tokenize
-    tokenized_dataset = inter_dataset.map(_sentence_to_ids, num_proc=os.cpu_count())
-    tokenized_dataset.remove_columns("sentence")
+    num_proc = 3
+    tokenized_dataset = inter_dataset.map(
+        lambda examples: _sentence_to_ids(examples, copy.copy(TOKENIZER), batched=True), 
+        remove_columns=["sentence"],
+        num_proc=num_proc,
+        batched=True,
+        load_from_cache_file=False
+    )
+    filtered_dataset = tokenized_dataset.filter(
+        lambda example: len(example["tokens"])>0 and not (len(example["tokens"])==1 and len(example["tokens"][0])==0),
+        num_proc=None,
+    )
+    del tokenized_dataset
+    logger.info("Tokenize finished")
+    del inter_dataset
 
     # create_examples_from_document
     if dataset_type == "linebyline":
-        processed_dataset = tokenized_dataset.map(_create_examples_from_document_for_linebyline, num_proc=os.cpu_count(), batched=True, batch_size=1, remove_columns=tokenized_dataset.columns_names)
+        processed_dataset = filtered_dataset.map(
+            lambda example: _create_examples_from_document_for_linebyline(example, TOKENIZER),
+            num_proc=None,
+            batched=True,
+            batch_size=1,
+            remove_columns=["tokens"],
+            load_from_cache_file=False
+        )
     elif dataset_type == "nsp":
         global REF_DATASET
-        REF_DATASET = tokenized_dataset.copy()
-        processed_dataset = tokenized_dataset.map(lambda example, idx: _create_examples_from_document_for_nsp(), batched=True, batch_size=1, remove_columns=tokenized_dataset.columns_names)
+        REF_DATASET = filtered_dataset.copy()
+        processed_dataset = filtered_dataset.map(
+            lambda example, idx: _create_examples_from_document_for_nsp(example, index, TOKENIZER),
+            num_proc=None,
+            batched=True,
+            batch_size=1,
+            remove_columns=["tokens"],
+            load_from_cache_file=False
+        )
     else:
         raise ValueError(f"Invalid dataset_type, got {dataset_type}")
     # save processed data
     processed_dataset.save_to_disk(processed_dataset_path)
+    logger.info(f"Processed dataset saved in {processed_dataset_path}")
 
 
-def _sentence_to_ids(example):
-    tokens = [TOKENIZER.tokenize(line) for line in example["sentence"]]
-    tokens = [TOKENIZER.convert_tokens_to_ids(tk) for tk in tokens]
+def _sentence_to_ids(example,TOKENIZER, batched):
+    if batched:
+        tokens = [[TOKENIZER.tokenize(line) for line in batch] for batch in example["sentence"]]
+        tokens = [[TOKENIZER.convert_tokens_to_ids(tk) for tk in batch if tk] for batch in tokens if batch]
+    else:
+        tokens = [TOKENIZER.tokenize(line) for line in example["sentence"]]
+        tokens = [TOKENIZER.convert_tokens_to_ids(tk) for tk in tokens if tk]
     return {"tokens": tokens}
 
-def _create_examples_from_document_for_linebyline(document):
+def _create_examples_from_document_for_linebyline(document, TOKENIZER):
     """Creates examples for a single document."""
     block_size = MAX_LENGTH
     max_num_tokens = block_size - TOKENIZER.num_special_tokens_to_add(pair=False)
@@ -190,37 +143,33 @@ def _create_examples_from_document_for_linebyline(document):
     current_length = 0
     i = 0
     input_ids, token_type_ids = [], []
-
+    # for batched process, index must be 0
+    document = document["tokens"][0]
     while i < len(document):
-        segment = document[i]["tokens"].tolist()
+        segment = document[i]
         current_chunk.append(segment)
         current_length += len(segment)
         if i == len(document) - 1 or current_length >= target_seq_length:
             if current_chunk:
-                # `a_end` is how many segments from `current_chunk` go into the `A`
-                # (first) sentence.
-                tokens = []
-                for tk in current_chunk:
-                    tokens.extend(tk)
-
+                current_chunk = list(itertools.chain.from_iterable(current_chunk))
                 """Truncates a pair of sequences to a maximum sequence length."""
                 while True:
-                    total_length = len(tokens)
+                    total_length = len(current_chunk)
                     if total_length <= max_num_tokens:
                         break
                     # We want to sometimes truncate from the front and sometimes from the
                     # back to add more randomness and avoid biases.
                     if random.random() < 0.5:
-                        del tokens[0]
+                        del current_chunk[0]
                     else:
-                        tokens.pop()
+                        current_chunk.pop()
 
-                assert len(tokens) >= 1
+                assert len(current_chunk) >= 1
 
                 # add special tokens
-                input_ids.append(TOKENIZER.build_inputs_with_special_tokens(tokens))
+                input_ids.append(TOKENIZER.build_inputs_with_special_tokens(current_chunk))
                 # add token type ids, 0 for sentence a, 1 for sentence b
-                token_type_ids.append(TOKENIZER.create_token_type_ids_from_sequences(tokens))
+                token_type_ids.append(TOKENIZER.create_token_type_ids_from_sequences(current_chunk))
 
             current_chunk = []
             current_length = 0
@@ -229,7 +178,7 @@ def _create_examples_from_document_for_linebyline(document):
     return {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
 
-def _create_examples_from_document_for_nsp(document, doc_index)
+def _create_examples_from_document_for_nsp(document, doc_index):
     # Overwride TextDatasetForNextSentencePrediction.create_examples_from_document
     """Creates examples for a single document."""
     block_size = MAX_LENGTH
@@ -250,9 +199,10 @@ def _create_examples_from_document_for_nsp(document, doc_index)
     current_length = 0
     i = 0
     input_ids, token_type_ids, next_sentence_label = [], [], []
-
+    # for batched process, index must be 0
+    document = document["tokens"][0]
     while i < len(document):
-        segment = document[i].tolist()
+        segment = document[i]
         current_chunk.append(segment)
         current_length += len(segment)
         if i == len(document) - 1 or current_length >= target_seq_length:
@@ -262,10 +212,11 @@ def _create_examples_from_document_for_nsp(document, doc_index)
                 a_end = 1
                 if len(current_chunk) >= 2:
                     a_end = random.randint(1, len(current_chunk) - 1)
-
-                tokens_a = []
-                for j in range(a_end):
-                    tokens_a.extend(current_chunk[j])
+                
+                tokens_a = list(itertools.chain.from_iterable(current_chunk[:a_end]))
+                # tokens_a = []
+                # for j in range(a_end):
+                #     tokens_a.extend(current_chunk[j])
 
                 tokens_b = []
 
@@ -340,27 +291,29 @@ if __name__ == "__main__":
     # arguments
     parser = argparse.ArgumentParser()
     # required
-    parser.add_argument("--tokenizer_name_or_path", type=str, required=True, help="uploaded name in HuggingFace Hub or path of vocab.txt")
+    parser.add_argument("--tokenizer_name_or_path", type=str, required=True, help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
     parser.add_argument("--input_corpus", type=str, required=True, choices=["wiki-ja", "wikifin-ja", "wiki-en", "openwebtext"])
     parser.add_argument("--max_length", type=int, required=True)
     parser.add_argument("--dataset_type", type=str, required=True, choices=["linebyline", "nsp"])
-    parser.add_argument("--dataset_dir", type=str, required=True, help="directory which saves each dataset")
     
     # optional
     parser.add_argument("--input_file", type=str, default="")
+    parser.add_argument("--dataset_dir", type=str, default="./datasets/", help="directory which saves each dataset")
     parser.add_argument("--tokenizer_type", type=str, default="", choices=["", "sentencepiece", "wordpiece"])
     parser.add_argument("--mecab_dic_type", type=str, default="", choices=["", "unidic_lite", "unidic", "ipadic"])
     parser.add_argument("--cache_dir", type=str, default="./.cache/datasets/")
     parser.add_argument("--over_write", action="store_true")
-
-    assert args.input_corpus not in ["wiki-en", "openwebtext"] and args.input_file != "", "input_corpus must be specified with english corpus"
+    
+    args = parser.parse_args()
+    assert args.input_corpus in ["wiki-en", "openwebtext"] or args.input_file != "", "input_file must be specified with japanese corpus"
 
     # global variables
+    datasets.config.IN_MEMORY_MAX_SIZE = 250 * 10**9
     SHORT_SEQ_PROBABILITY = 0.1
     NSP_PROBABILITY = 0.5
     MAX_LENGTH = args.max_length
 
-    TOKENIZER = load_tokenizer(
+    TOKENIZER = utils.load_tokenizer(
         tokenizer_name_or_path=args.tokenizer_name_or_path,
         tokenizer_type=args.tokenizer_type,  
         mecab_dic_type=args.mecab_dic_type,
