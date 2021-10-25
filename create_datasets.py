@@ -1,6 +1,7 @@
 import argparse
 import copy
 import itertools
+import logging
 import os
 import random
 import re
@@ -312,6 +313,18 @@ if __name__ == "__main__":
     SHORT_SEQ_PROBABILITY = 0.1
     NSP_PROBABILITY = 0.5
     MAX_LENGTH = args.max_length
+
+    # get root logger
+    # logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y/%m/%d %H:%M:%S', level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        fmt='%(asctime)s %(levelname)s: %(message)s', 
+        datefmt='%Y/%m/%d %H:%M:%S'
+    )
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
 
     TOKENIZER = utils.load_tokenizer(
         tokenizer_name_or_path=args.tokenizer_name_or_path,
