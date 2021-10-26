@@ -99,7 +99,7 @@ def make_dataset(
         )
     elif dataset_type == "nsp":
         global REF_DATASET
-        REF_DATASET = filtered_dataset.copy()
+        REF_DATASET = copy.copy(filtered_dataset)
         processed_dataset = filtered_dataset.map(
             lambda example, idx: _create_examples_from_document_for_nsp(example, index, TOKENIZER),
             num_proc=None,
