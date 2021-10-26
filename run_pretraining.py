@@ -195,7 +195,7 @@ def run_pretraining(
         model = model,
         args = training_args,
         data_collator = data_collator,
-        train_dataset = train_dataset,
+        train_dataset = dataset,
         node_rank = node_rank
     )
     trainer.batch_config = param_config['batch-size']
