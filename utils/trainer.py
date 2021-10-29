@@ -684,6 +684,15 @@ class MyTrainer(Trainer):
             self.store_flos()
 
             self.log(logs)
+        
+        metrics = None
+        if self.control.should_evaluate:
+            metrics = self.evaluate()
+            self._report_to_hp_search(trial, epoch, metrics)
+
+        if self.control.should_save:
+            self._save_checkpoint(model, trial, metrics=metrics)
+            self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     # override to log electra's generator and discriminator losses
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
