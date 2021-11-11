@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+import os
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -126,3 +127,18 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
             hidden_states=outputs_disc.hidden_states,
             attentions=outputs_disc.attentions,
         )
+
+    @classmethod
+    def from_pretrained(
+            cls,
+            pretrained_generator_model_name_or_path: Union[str, os.PathLike],
+            pretrained_discriminator_model_name_or_path: Union[str, os.PathLike],
+            loss_weights=(1.0,50.0),
+        ):
+        config_generator = ElectraConfig.from_pretrained(pretrained_generator_model_name_or_path)
+        config_discriminator = ElectraConfig.from_pretrained(pretrained_discriminator_model_name_or_path)
+        model = cls(config_generator, config_discriminator)
+         # weight sharing
+        model.discriminator.electra.embeddings = model.generator.electra.embeddings
+        model.generator.generator_lm_head.weight = model.generator.electra.embeddings.word_embeddings.weight
+        return model

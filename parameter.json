@@ -122,5 +122,28 @@
         "train-steps" : 1000000,
         "save-steps" : 50000,
         "logging-steps" : 5000
+    },
+    "bert-small-further" : {
+        "pretrained_model_name_or_path" : "izumi-lab/bert-small-japanese",
+        "flozen-layers" : 6,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "-1" : 128
+        },
+        "train-steps" : 1450000,
+        "save-steps" : 100000
+    },
+    "electra-small-further" : {
+        "pretrained_generator_model_name_or_path" : "izumi-lab/electra-small-paper-japanese-generator",
+        "pretrained_discriminator_model_name_or_path" : "izumi-lab/electra-small-japanese-discriminator",
+        "flozen-layers" : -1,
+        "warmup-steps" : 10000,
+        "learning-rate" : 5e-4,
+        "batch-size" : {
+            "-1" : 128
+        },
+        "train-steps" : 1000000,
+        "save-steps" : 100000
     }
 }
