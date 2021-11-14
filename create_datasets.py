@@ -73,7 +73,7 @@ def make_dataset(
     # tokenize
     num_proc = 3
     tokenized_dataset = inter_dataset.map(
-        lambda examples: _sentence_to_ids(examples, copy.copy(TOKENIZER), batched=True), 
+        lambda example: _sentence_to_ids(example, copy.copy(TOKENIZER), batched=True), 
         remove_columns=["sentence"],
         num_proc=num_proc,
         batched=True,
@@ -101,10 +101,11 @@ def make_dataset(
         global REF_DATASET
         REF_DATASET = copy.copy(filtered_dataset)
         processed_dataset = filtered_dataset.map(
-            lambda example, idx: _create_examples_from_document_for_nsp(example, index, TOKENIZER),
+            lambda example, idx: _create_examples_from_document_for_nsp(example, idx, TOKENIZER),
             num_proc=None,
             batched=True,
             batch_size=1,
+            with_indices=True,
             remove_columns=["tokens"],
             load_from_cache_file=False
         )
@@ -179,7 +180,7 @@ def _create_examples_from_document_for_linebyline(document, TOKENIZER):
     return {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
 
-def _create_examples_from_document_for_nsp(document, doc_index):
+def _create_examples_from_document_for_nsp(document, doc_index, TOKENIZER):
     # Overwride TextDatasetForNextSentencePrediction.create_examples_from_document
     """Creates examples for a single document."""
     block_size = MAX_LENGTH
@@ -243,7 +244,7 @@ def _create_examples_from_document_for_nsp(document, doc_index):
 
                     random_start = random.randint(0, len(random_document) - 1)
                     for j in range(random_start, len(random_document)):
-                        tokens_b.extend(random_document[j].tolist())
+                        tokens_b.extend(random_document[j])
                         if len(tokens_b) >= target_b_length:
                             break
                     # We didn't actually use these segments so we "put them back" so
@@ -293,7 +294,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # required
     parser.add_argument("--tokenizer_name_or_path", type=str, required=True, help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
-    parser.add_argument("--input_corpus", type=str, required=True, choices=["wiki-ja", "wikifin-ja", "wiki-en", "openwebtext"])
+    parser.add_argument("--input_corpus", type=str, required=True, choices=["wiki-ja", "wikifin-ja", "fin-ja", "wiki-en", "openwebtext"])
     parser.add_argument("--max_length", type=int, required=True)
     parser.add_argument("--dataset_type", type=str, required=True, choices=["linebyline", "nsp"])
     
