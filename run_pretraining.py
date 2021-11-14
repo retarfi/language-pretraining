@@ -239,6 +239,7 @@ def run_pretraining(
 def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
     """
     Return
+    model_name: str, bert or electra
     load_pretrained: bool, True when further pretrain and False when pretrain from scratch
     """
     if model_type not in param_config:
@@ -270,7 +271,7 @@ def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
     if str(local_rank) not in param_config['batch-size'].keys():
         raise ValueError(f'local_rank {local_rank} is not defined in batch-size of parameter_file')
     logger.info(f'Config[{model_type}] is loaded')
-    return load_pretrained
+    return model_name, load_pretrained
     
 
 
@@ -305,7 +306,7 @@ if __name__ == "__main__":
     # parameter configuration
     with open(args.parameter_file, 'r') as f:
         param_config = json.load(f)
-    load_pretrained = assert_config(param_config, args.model_type, args.local_rank)
+    model_name, load_pretrained = assert_config(param_config, args.model_type, args.local_rank)
     
     tokenizer = utils.load_tokenizer(
         tokenizer_name_or_path = args.tokenizer_name_or_path,
