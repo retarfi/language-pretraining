@@ -44,10 +44,10 @@ def get_model_bert(
         flozen_layers = param_config['flozen-layers']
         if flozen_layers > -1:
             for name, param in model.bert.embeddings.named_parameters():
-                params.requires_grad = False
+                param.requires_grad = False
             for i in range(flozen_layers):
                 for name, param in model.bert.encoder[i].named_parameters():
-                    params.requires_grad = False
+                    param.requires_grad = False
     else:
         bert_config = BertConfig(
             vocab_size = tokenizer.vocab_size, 
