@@ -319,7 +319,7 @@ if __name__ == "__main__":
         model_name = model_name,
         model_dir = args.model_dir,
         load_pretrained = load_pretrained,
-        param_config = param_config[model_name],
+        param_config = param_config,
         fp16_type = args.fp16_type,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
