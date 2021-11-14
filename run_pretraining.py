@@ -46,7 +46,7 @@ def get_model_bert(
             for name, param in model.bert.embeddings.named_parameters():
                 param.requires_grad = False
             for i in range(flozen_layers):
-                for name, param in model.bert.encoder[i].named_parameters():
+                for name, param in model.bert.encoder.layer[i].named_parameters():
                     param.requires_grad = False
     else:
         bert_config = BertConfig(
@@ -78,7 +78,7 @@ def get_model_electra(
                 for name, param in m.electra.embeddings.named_parameters():
                     params.requires_grad = False
                 for i in range(flozen_layers):
-                    for name, param in m.electra.encoder[i].named_parameters():
+                    for name, param in m.electra.encoder.layer[i].named_parameters():
                         params.requires_grad = False
     else:
         frac_generator = Fraction(param_config['generator-size'])
@@ -179,7 +179,7 @@ def run_pretraining(
         model = get_model_bert(tokenizer, load_pretrained, param_config)
     elif model_name == 'electra':
         model = get_model_electra(tokenizer, load_pretrained, param_config)
-    logger.info(f'{model_name} mode is loaded')    
+    logger.info(f'{model_name} model is loaded')    
 
     # data collator
     if model_name == 'bert':
