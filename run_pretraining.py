@@ -35,47 +35,73 @@ logger = transformers.logging.get_logger()
 
 def get_model_bert(
         tokenizer:PreTrainedTokenizerBase,
+        load_pretrained:bool,
         param_config:dict,
     ) -> PreTrainedModel:
     
-    bert_config = BertConfig(
-        vocab_size = tokenizer.vocab_size, 
-        hidden_size = param_config['hidden-size'], 
-        num_hidden_layers = param_config['number-of-layers'],
-        num_attention_heads = param_config['attention-heads'],
-        intermediate_size = param_config['ffn-inner-hidden-size'],
-        max_position_embeddings = param_config['sequence-length'],
-    )
-    model = BertForPreTraining(config=bert_config)
+    if load_pretrained:
+        model = BertForPreTraining.from_pretrained(param_config['pretrained_model_name_or_path'])
+        flozen_layers = param_config['flozen-layers']
+        if flozen_layers > -1:
+            for name, param in model.bert.embeddings.named_parameters():
+                param.requires_grad = False
+            for i in range(flozen_layers):
+                for name, param in model.bert.encoder.layer[i].named_parameters():
+                    param.requires_grad = False
+    else:
+        bert_config = BertConfig(
+            vocab_size = tokenizer.vocab_size, 
+            hidden_size = param_config['hidden-size'], 
+            num_hidden_layers = param_config['number-of-layers'],
+            num_attention_heads = param_config['attention-heads'],
+            intermediate_size = param_config['ffn-inner-hidden-size'],
+            max_position_embeddings = param_config['sequence-length'],
+        )
+        model = BertForPreTraining(config=bert_config)
     return model
 
 
 def get_model_electra(
         tokenizer:PreTrainedTokenizerBase,
+        load_pretrained:bool,
         param_config:dict,
     ) -> PreTrainedModel:
 
-    frac_generator = Fraction(param_config['generator-size'])
-    config_generator = ElectraConfig(
-        vocab_size = tokenizer.vocab_size, 
-        embedding_size = param_config['embedding-size'],
-        hidden_size = int(param_config['hidden-size'] * frac_generator), 
-        num_attention_heads = int(param_config['attention-heads'] * frac_generator),
-        num_hidden_layers = param_config['number-of-layers'],
-        intermediate_size = int(param_config['ffn-inner-hidden-size'] * frac_generator),
-    )
-    config_discriminator = ElectraConfig(
-        vocab_size = tokenizer.vocab_size, 
-        embedding_size = param_config['embedding-size'],
-        hidden_size = param_config['hidden-size'], 
-        num_attention_heads = param_config['attention-heads'],
-        num_hidden_layers = param_config['number-of-layers'],
-        intermediate_size = param_config['ffn-inner-hidden-size'],
-    )
-    model = utils.ElectraForPretrainingModel(
-        config_generator = config_generator,
-        config_discriminator = config_discriminator,
-    )
+    if load_pretrained:
+        model = utils.ElectraForPretrainingModel.from_pretrained(
+            param_config['pretrained_generator_model_name_or_path'],
+            param_config['pretrained_discriminator_model_name_or_path']
+        )
+        flozen_layers = param_config['flozen-layers']
+        if flozen_layers > -1:
+            for m in [model.generator, model.discriminator]:
+                for name, param in m.electra.embeddings.named_parameters():
+                    params.requires_grad = False
+                for i in range(flozen_layers):
+                    for name, param in m.electra.encoder.layer[i].named_parameters():
+                        params.requires_grad = False
+    else:
+        frac_generator = Fraction(param_config['generator-size'])
+        config_generator = ElectraConfig(
+            vocab_size = tokenizer.vocab_size, 
+            embedding_size = param_config['embedding-size'],
+            hidden_size = int(param_config['hidden-size'] * frac_generator), 
+            num_attention_heads = int(param_config['attention-heads'] * frac_generator),
+            num_hidden_layers = param_config['number-of-layers'],
+            intermediate_size = int(param_config['ffn-inner-hidden-size'] * frac_generator),
+        )
+        config_discriminator = ElectraConfig(
+            vocab_size = tokenizer.vocab_size, 
+            embedding_size = param_config['embedding-size'],
+            hidden_size = param_config['hidden-size'], 
+            num_attention_heads = param_config['attention-heads'],
+            num_hidden_layers = param_config['number-of-layers'],
+            intermediate_size = param_config['ffn-inner-hidden-size'],
+        )
+        model = utils.ElectraForPretrainingModel(
+            config_generator = config_generator,
+            config_discriminator = config_discriminator,
+        )
     return model
 
 
@@ -84,6 +110,7 @@ def run_pretraining(
         dataset_dir:str,
         model_name:str,
         model_dir:str,
+        load_pretrained:bool,
         param_config:dict,
         fp16_type:int,
         do_whole_word_mask:bool,
@@ -149,10 +176,10 @@ def run_pretraining(
 
     # model
     if model_name == 'bert':
-        model = get_model_bert(tokenizer, param_config)
+        model = get_model_bert(tokenizer, load_pretrained, param_config)
     elif model_name == 'electra':
-        model = get_model_electra(tokenizer, param_config)
-    logger.info(f'{model_name} mode is loaded')    
+        model = get_model_electra(tokenizer, load_pretrained, param_config)
+    logger.info(f'{model_name} model is loaded')    
 
     # data collator
     if model_name == 'bert':
@@ -209,6 +236,45 @@ def run_pretraining(
     )
 
 
+def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
+    """
+    Return
+    model_name: str, bert or electra
+    load_pretrained: bool, True when further pretrain and False when pretrain from scratch
+    """
+    if model_type not in param_config:
+        raise KeyError(f'{model_type} not in parameters.json')
+    if 'electra-' in model_type.lower():
+        model_name = 'electra'
+    elif 'bert-' in model_type.lower():
+        model_name = 'bert'
+    else:
+        raise ValueError('Argument model_type must contain electra or bert')
+    param_config = param_config[model_type]
+    if len(param_config.keys() & {f'pretrained_{x}model_name_or_path' for x in ['', 'generator_', 'discriminator']}) > 0:
+        load_pretrained = True
+        set_assert = {'flozen-layers'}
+        if model_name == 'bert':
+            set_assert = set_assert | {'pretrained_model_name_or_path'}
+        if model_name == 'electra':
+            set_assert = set_assert | {f'pretrained_{x}_model_name_or_path' for x in ['generator', 'discriminator']}
+    else:
+        load_pretrained = False
+        set_assert = {
+            'number-of-layers', 'hidden-size', 'sequence-length', 'ffn-inner-hidden-size', 'attention-heads',
+            'warmup-steps', 'learning-rate', 'batch-size', 'train-steps'
+        }
+        if model_name == 'electra':
+            set_assert = set_assert | {'embedding-size', 'generator-size', 'mask-percent'}
+    if param_config.keys() < set_assert:
+        raise ValueError(f'{set_assert-param_config.keys()} is(are) not in parameter_file')
+    if str(local_rank) not in param_config['batch-size'].keys():
+        raise ValueError(f'local_rank {local_rank} is not defined in batch-size of parameter_file')
+    logger.info(f'Config[{model_type}] is loaded')
+    return model_name, load_pretrained
+    
+
+
 if __name__ == "__main__":
     # arguments
     parser = argparse.ArgumentParser()
@@ -217,8 +283,8 @@ if __name__ == "__main__":
                         help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
     parser.add_argument("--dataset_dir", type=str, required=True, help="directory of corpus dataset")
     parser.add_argument('--model_dir', type=str, required=True)
-    parser.add_argument('--parameter_file', type=str, required=True)
-    parser.add_argument('--model_type', type=str, required=True)
+    parser.add_argument('--parameter_file', type=str, required=True, help="json file defining model parameters")
+    parser.add_argument('--model_type', type=str, required=True, help="model parameter defined in the parameter_file. It must contain 'bert-' or 'electra-'")
     # optional
     parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
                         help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
@@ -240,26 +306,7 @@ if __name__ == "__main__":
     # parameter configuration
     with open(args.parameter_file, 'r') as f:
         param_config = json.load(f)
-    if args.model_type not in param_config:
-        raise KeyError(f'{args.model_type} not in parameters.json')
-    if 'electra-' in args.model_type.lower():
-        model_name = 'electra'
-    elif 'bert-' in args.model_type.lower():
-        model_name = 'bert'
-    else:
-        raise ValueError('Argument model_type must contain electra or bert')
-    param_config = param_config[args.model_type]
-    set_assert = {
-        'number-of-layers', 'hidden-size', 'sequence-length', 'ffn-inner-hidden-size', 'attention-heads',
-        'warmup-steps', 'learning-rate', 'batch-size', 'train-steps'
-    }
-    if model_name == 'electra':
-        set_assert = set_assert | set(['embedding-size', 'generator-size', 'mask-percent'])
-    if param_config.keys() < set_assert:
-        raise ValueError(f'{set_assert-param_config.keys()} is(are) not in parameter_file')
-    if str(args.local_rank) not in param_config['batch-size'].keys():
-        raise ValueError(f'local_rank {args.local_rank} is not defined in batch-size of parameter_file')
-    logger.info(f'Config[{args.model_type}] is loaded')
+    model_name, load_pretrained = assert_config(param_config, args.model_type, args.local_rank)
     
     tokenizer = utils.load_tokenizer(
         tokenizer_name_or_path = args.tokenizer_name_or_path,
@@ -271,7 +318,8 @@ if __name__ == "__main__":
         dataset_dir = args.dataset_dir,
         model_name = model_name,
         model_dir = args.model_dir,
-        param_config = param_config,
+        load_pretrained = load_pretrained,
+        param_config = param_config[args.model_type],
         fp16_type = args.fp16_type,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
