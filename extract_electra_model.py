@@ -17,16 +17,22 @@ warnings.simplefilter('ignore', UserWarning)
 assert transformers.__version__ in ['4.7.0'], f'This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}'
 
 def main(input_dir:str, output_dir:str, param_config:dict, save_generator:bool, save_discriminator:bool) -> None:
-    frac_generator = Fraction(param_config['generator-size'])
     config_discriminator = ElectraConfig.from_pretrained(input_dir)
-    config_generator = ElectraConfig(
-        vocab_size = config_discriminator.vocab_size, 
-        embedding_size = param_config['embedding-size'],
-        hidden_size = int(param_config['hidden-size'] * frac_generator), 
-        num_attention_heads = int(param_config['attention-heads'] * frac_generator),
-        num_hidden_layers = param_config['number-of-layers'],
-        intermediate_size = int(param_config['ffn-inner-hidden-size'] * frac_generator),
-    )
+    if 'generator-size' in param_config.keys():
+        frac_generator = Fraction(param_config['generator-size'])
+        config_generator = ElectraConfig(
+            vocab_size = config_discriminator.vocab_size, 
+            embedding_size = param_config['embedding-size'],
+            hidden_size = int(param_config['hidden-size'] * frac_generator), 
+            num_attention_heads = int(param_config['attention-heads'] * frac_generator),
+            num_hidden_layers = param_config['number-of-layers'],
+            intermediate_size = int(param_config['ffn-inner-hidden-size'] * frac_generator),
+        )
+    elif 'pretrained_generator_model_name_or_path' in param_config.keys():
+        config_generator = ElectraConfig.from_pretrained(param_config['pretrained_generator_model_name_or_path'])
+    else:
+        raise ValueError('For generator, pretrained_generator_model_name_or_path or <generator-size, embedding-size, hidden-size, attention-heads, number-of-layers, and ffn-inner-hidden-size> must be specified in json file')
+
     model = utils.ElectraForPretrainingModel.from_pretrained(
         input_dir,
         config = config_generator,
