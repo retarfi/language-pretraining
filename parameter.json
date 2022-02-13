@@ -127,7 +127,7 @@
         "pretrained_model_name_or_path" : "izumi-lab/bert-small-japanese",
         "flozen-layers" : 6,
         "warmup-steps" : 10000,
-        "learning-rate" : 5e-4,
+        "learning-rate" : 1e-4,
         "batch-size" : {
             "-1" : 128
         },
@@ -139,7 +139,7 @@
         "pretrained_discriminator_model_name_or_path" : "izumi-lab/electra-small-paper-japanese-discriminator",
         "flozen-layers" : -1,
         "warmup-steps" : 10000,
-        "learning-rate" : 5e-4,
+        "learning-rate" : 1e-4,
         "batch-size" : {
             "-1" : 128
         },

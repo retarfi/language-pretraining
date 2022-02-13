@@ -76,10 +76,10 @@ def get_model_electra(
         if flozen_layers > -1:
             for m in [model.generator, model.discriminator]:
                 for name, param in m.electra.embeddings.named_parameters():
-                    params.requires_grad = False
+                    param.requires_grad = False
                 for i in range(flozen_layers):
                     for name, param in m.electra.encoder.layer[i].named_parameters():
-                        params.requires_grad = False
+                        param.requires_grad = False
     else:
         frac_generator = Fraction(param_config['generator-size'])
         config_generator = ElectraConfig(

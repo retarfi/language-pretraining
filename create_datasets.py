@@ -19,56 +19,47 @@ def make_dataset(
     dataset_type:str,
     dataset_dir:str,
     cache_dir:str,
-    over_write:bool
 ) -> Union[torch.utils.data.dataset.Dataset, datasets.dataset_dict.DatasetDict, datasets.arrow_dataset.Dataset, datasets.dataset_dict.IterableDatasetDict, datasets.iterable_dataset.IterableDataset]:
 
-    inter_dataset_path = os.path.join(dataset_dir, "inter_" + input_corpus)
     processed_dataset_path = os.path.join(dataset_dir, f"{dataset_type}_{MAX_LENGTH}_{input_corpus}")
     
-    if os.path.isdir(inter_dataset_path) and not over_write:
-        # load sentences
-        inter_dataset = datasets.load_from_disk(inter_dataset_path)
-        logger.info(f"dataset loaded from {inter_dataset_path}")
-    else:
-        # make sentences
-        documents = [[]]
-        if input_corpus in ["wiki-en", "openwebtext"]:
-            if input_corpus == "wiki-en":
-                dataset = datasets.load_dataset("wikipedia", "20200501.en", cache_dir=cache_dir, split="train")["text"]
-            elif input_corpus == "openwebtext":
-                dataset = datasets.load_dataset("openwebtext", cache_dir=cache_dir, split="train")["text"]
-            else:
-                raise ValueError(f"Invalid input_corpus, got {input_corpus}")
-            import nltk
-            for d in dataset:
-                for paragraph in d.split("\n"):
-                    if len(paragraph) < 80:
-                        continue
-                    for sentence in nltk.sent_tokenize(paragraph):
-                        # () is remainder after link in it filtered out
-                        sentence = sentence.replace("()","")
-                        if sentence and re.sub(r"\s", "", sentence) != "":
-                            documents[-1].append(sentence)
-                    documents.append([])
+    # make sentences
+    documents = [[]]
+    if input_corpus in ["wiki-en", "openwebtext"]:
+        if input_corpus == "wiki-en":
+            dataset = datasets.load_dataset("wikipedia", "20200501.en", cache_dir=cache_dir, split="train")["text"]
+        elif input_corpus == "openwebtext":
+            dataset = datasets.load_dataset("openwebtext", cache_dir=cache_dir, split="train")["text"]
         else:
-            with open(input_file, encoding="utf-8") as f:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    line = line.strip()
-                    # Empty lines are used as document delimiters
-                    if not line and len(documents[-1]) != 0:
-                        documents.append([])
-                    if line and re.sub(r"\s", "", line) != "":
-                        documents[-1].append(line)
-        if documents[-1] == []:
-            documents.pop(-1)
-        # save intermiediate
-        inter_dataset = datasets.Dataset.from_dict({"sentence": documents})
-        del documents
-        inter_dataset.save_to_disk(inter_dataset_path)
-        logger.info(f"dataset saved in {inter_dataset_path}")
+            raise ValueError(f"Invalid input_corpus, got {input_corpus}")
+        import nltk
+        for d in dataset:
+            for paragraph in d.split("\n"):
+                if len(paragraph) < 80:
+                    continue
+                for sentence in nltk.sent_tokenize(paragraph):
+                    # () is remainder after link in it filtered out
+                    sentence = sentence.replace("()","")
+                    if sentence and re.sub(r"\s", "", sentence) != "":
+                        documents[-1].append(sentence)
+                documents.append([])
+    else:
+        with open(input_file, encoding="utf-8") as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                line = line.strip()
+                # Empty lines are used as document delimiters
+                if not line and len(documents[-1]) != 0:
+                    documents.append([])
+                if line and re.sub(r"\s", "", line) != "":
+                    documents[-1].append(line)
+    if documents[-1] == []:
+        documents.pop(-1)
+    # save intermiediate
+    inter_dataset = datasets.Dataset.from_dict({"sentence": documents})
+    del documents
     
     # tokenize
     num_proc = 3
@@ -304,7 +295,6 @@ if __name__ == "__main__":
     parser.add_argument("--tokenizer_type", type=str, default="", choices=["", "sentencepiece", "wordpiece"])
     parser.add_argument("--mecab_dic_type", type=str, default="", choices=["", "unidic_lite", "unidic", "ipadic"])
     parser.add_argument("--cache_dir", type=str, default="./.cache/datasets/")
-    parser.add_argument("--over_write", action="store_true")
     
     args = parser.parse_args()
     assert args.input_corpus in ["wiki-en", "openwebtext"] or args.input_file != "", "input_file must be specified with japanese corpus"
@@ -338,6 +328,5 @@ if __name__ == "__main__":
         input_file=args.input_file,
         dataset_type=args.dataset_type,
         dataset_dir=args.dataset_dir,
-        cache_dir=args.cache_dir,
-        over_write=args.over_write
+        cache_dir=args.cache_dir
     )
