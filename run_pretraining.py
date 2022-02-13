@@ -124,14 +124,14 @@ def run_pretraining(
     os.makedirs(model_dir, exist_ok=True)
 
     # training argument
-    if do_continue:
-        training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
-        per_device_train_batch_size = training_args.per_device_train_batch_size
+    # if do_continue:
+    #     training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
+    #     per_device_train_batch_size = training_args.per_device_train_batch_size
+    # else:
+    if torch.cuda.device_count() > 0:
+        per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
     else:
-        if torch.cuda.device_count() > 0:
-            per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
-        else:
-            per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
+        per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
     # initialize
     training_args = TrainingArguments(
         output_dir = model_dir,
