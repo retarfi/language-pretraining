@@ -123,44 +123,45 @@ def run_pretraining(
         run_name = dt.datetime.now().strftime("%y%m%d") + "_" + os.path.basename(os.path.dirname(model_dir))
     os.makedirs(model_dir, exist_ok=True)
 
+    # training argument
+    # if do_continue:
+    #     training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
+    #     per_device_train_batch_size = training_args.per_device_train_batch_size
+    # else:
     if torch.cuda.device_count() > 0:
         per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
     else:
         per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
-    # training argument
-    if do_continue:
-        training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
-        per_device_train_batch_size = training_args.per_device_train_batch_size
-    else:
-        # initialize
-        training_args = TrainingArguments(
-            output_dir = model_dir,
-            do_train = True,
-            do_eval = False, # default
-            per_device_train_batch_size = per_device_train_batch_size,
-            learning_rate = param_config['learning-rate'], 
-            adam_beta1 = 0.9, # same as BERT paper
-            adam_beta2 = 0.999, # same as BERT paper
-            adam_epsilon = 1e-6,
-            weight_decay = 0.01, # same as BERT paper
-            warmup_steps = param_config['warmup-steps'], 
-            logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
-            save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 50000, #default:500
-            save_strategy = "steps", # default:"steps"
-            logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
-            save_total_limit = 20, # optional
-            seed = 42, # default
-            fp16 = bool(fp16_type!=0),
-            fp16_opt_level = f"O{fp16_type}", 
-            #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
-            disable_tqdm = True,
-            max_steps = param_config['train-steps'],
-            gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps'],
-            dataloader_num_workers = 3,
-            dataloader_pin_memory=False,
-            local_rank = local_rank,
-            report_to = "tensorboard"
-        )
+    # initialize
+    training_args = TrainingArguments(
+        output_dir = model_dir,
+        do_train = True,
+        do_eval = False, # default
+        per_device_train_batch_size = per_device_train_batch_size,
+        learning_rate = param_config['learning-rate'], 
+        adam_beta1 = 0.9, # same as BERT paper
+        adam_beta2 = 0.999, # same as BERT paper
+        adam_epsilon = 1e-6,
+        weight_decay = 0.01, # same as BERT paper
+        warmup_steps = param_config['warmup-steps'], 
+        logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
+        save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 50000, #default:500
+        save_strategy = "steps", # default:"steps"
+        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
+        save_total_limit = 20, # optional
+        seed = 42, # default
+        fp16 = bool(fp16_type!=0),
+        fp16_opt_level = f"O{fp16_type}", 
+        #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
+        disable_tqdm = True,
+        max_steps = param_config['train-steps'],
+        gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps'],
+        dataloader_num_workers = 3,
+        dataloader_pin_memory=False,
+        local_rank = local_rank,
+        report_to = "tensorboard"
+    )
+    if not do_continue:
         if local_rank != -1:
             if torch.cuda.device_count() > 0:
                 training_args.per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
