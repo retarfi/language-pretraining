@@ -1,10 +1,75 @@
-# BERT and ELECTRA Models for Japanese
+<div id="top"></div>
+
+<h1 align="center">Pre-training Language Models for Japanese</h1>
+
+<p align="center">
+  <a href="https://github.com/retarfi/language-pretraining#licenses">
+    <img alt="GitHub" src="https://img.shields.io/badge/license-Apache--2.0-brightgreen">
+  </a>
+  <a href="https://github.com/retarfi/language-pretraining/releases">
+    <img alt="GitHub release" src="https://img.shields.io/github/v/release/retarfi/language-pretraining.svg">
+  </a>
+</p>
 
 This is a repository of pretrained Japapanese BERT and ELECTRA models.
 The models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab).
 BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base models trained by Wikipedia or financial dataset is available in this URL.
 
-## Model Architecture
+**issueは日本語でも大丈夫です。**
+
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#pre-trained-models">Pre-trained Models</a>
+      <ul>
+        <li><a href="#model-architecture">Model Architecture</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#training-data">Training Data</a>
+      <ul>
+        <li><a href="#wikipedia-model">Wikipedia Model</a></li>
+        <li><a href="#financial-model">Financial Model</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#train-tokenizer">Train Tokenizer</a></li>
+        <li><a href="#create-dataset">Create Dataset</a></li>
+        <li>
+          <a href="#training">Training</a>
+          <ul>
+            <li><a href="#additional-pre-training">Additional Pre-training</a></li>
+            <li><a href="#for-electra">For ELECTRA</a></li>
+            <li><a href="#training-log">Training Log</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li>
+      <a href="#citation">Citation</a>
+      <ul>
+        <li><a href="#pre-trained-model">Pre-trained Model</a></li>
+        <li><a href="#this-implementation">This Implementation</a></li>
+      </ul>
+    </li>
+    <li><a href="#licenses">Licenses</a></li>
+    <li><a href="#related-work">Related Work</a></li>
+    <li><a href="#acknowledgements">Acknowledgements</a></li>
+  </ol>
+</details>
+
+## Pre-trained Models
+### Model Architecture
+Following models are available now:
+
+- BERT
+- ELECTRA
+
 The architecture of BERT-small, BERT-base, ELECTRA-small-paper, ELECTRA-base models are the same as those in [the original ELECTRA paper](https://arxiv.org/abs/2003.10555) (ELECTRA-small-paper is described as ELECTRA-small in the paper).
 The architecture of ELECTRA-small is the same as that in [the ELECTRA implementation by Google](https://github.com/google-research/electra).
 
@@ -21,15 +86,15 @@ Other models such as BERT-large or ELECTRA-large are also available in this impl
 You can also add your original parameters in parameter.json.
 
 
-## Training Data
+### Training Data
 Training data are aggregated to a text file.
 Each sentence is in one line and a blank line is inserted between documents.
 
-### Wikipedia Model
+#### Wikipedia Model
 The normal models (not financial models) are trained on the Japanese version of Wikipedia, using [Wikipedia dump](https://dumps.wikimedia.org/jawiki/) file as of June 1, 2021.
 The corpus file is 2.9GB, consisting of approximately 20M sentences.
 
-### Financial Model
+#### Financial Model
 The financial models are trained on Wikipedia corpus and financial corpus.
 The Wikipedia corpus is the same as described above.
 The financial corpus consists of 2 corpora:
@@ -60,9 +125,8 @@ $ python train_tokenizer.py \
 --num_unused_tokens 10 
 ```
 
-### Create Dataset
-In this implementation, available datasets are limited in [create_datasets.py#L297](create_datasets.py#L297) to `wiki-ja`, `wikifin-ja`, `fin-ja`, `wiki-en`, and `openwebtext`.  
-However, you can train any type of corpus in Japanese.  
+### Create Dataset  
+You can train any type of corpus in Japanese.  
 When you train with another dataset, please add your corpus name with the line.  
 The output directory name is `<dataset_type>_<max_length>_<input_corpus>`.  
 In the following case, the output directory name is `nsp_128_wiki-ja`.
@@ -102,6 +166,8 @@ $ python create_datasets.py \
 --dataset_type linebyline \
 --dataset_dir datasets/
 ```
+
+In English, available datasets are limited `wiki-en` and `openwebtext`.
 
 
 ### Training
@@ -177,7 +243,7 @@ $ NCCL_SOCKET_IFNAME=eno1 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.l
 (--do_continue)
 ```
 
-#### Additional Pre-Training
+#### Additional Pre-training
 You can train models additionally with existing pre-trained model.  
 For example, `bert-small-additional` model is defined in parameter.json:
 ```
@@ -209,7 +275,7 @@ $ python run_pretraining.py \
 --model_type bert-small-additional
 ```
 
-### ELECTRA
+### For ELECTRA
 ELECTRA models generated by run_pretraining.py contain both generator and discriminator.
 For general use, separation is needed.
 
@@ -228,12 +294,25 @@ In this example, the generator model is saved in `./model/electra/extracted-1000
 ### Training Log
 Tensorboard is available for the training log.
 
+
+<!-- ROADMAP -->
+## Roadmap
+
+- [ ] Better creation method with linebyline datasets
+- [ ] Update models in Hugging Face's page
+- [ ] Apply chord formatter (black and flake8)
+- [ ] Add RoBERTa feature (tokenizer and pre-training method)
+- [ ] Add available word segmentation (other than MeCab)
+
+See the [open issues](https://github.com/retarfi/language-pretraining/issues) for a full list of proposed features (and known issues).
+
+
 ## Citation
-### Pretrained Model
+### Pre-trained Model
 **There will be another paper for this pretrained model.
 Be sure to check here again when you cite.**
 ```
-@inproceedings{bert_electra_japanese,
+@inproceedings{suzuki-etal-2022-sigfin,
   title = {Construction and Validation of a Pre-Training and Additional Pre-Training Financial Language Model}
   author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
   month = {mar},
@@ -244,7 +323,7 @@ Be sure to check here again when you cite.**
 
 ### This Implementation
 ```
-@misc{bert_electra_japanese,
+@misc{suzuki-2021-github,
   author = {Masahiro Suzuki},
   title = {BERT and ELECTRA Models for Japanese},
   year = {2021},
@@ -273,5 +352,5 @@ The codes in this repository are distributed under the [Apache License 2.0](http
     - Author: Richard Wang
     - https://github.com/richarddwang/electra_pytorch
 
-## Acknowledgement
-This work was supported by JSPS KAKENHI Grant Number JP21K12010. 
+## Acknowledgements
+This work was supported by JSPS KAKENHI Grant Number JP21K12010, and the JST-Mirai Program Grant Number JPMJMI20B1, Japan.
