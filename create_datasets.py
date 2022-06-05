@@ -285,7 +285,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # required
     parser.add_argument("--tokenizer_name_or_path", type=str, required=True, help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
-    parser.add_argument("--input_corpus", type=str, required=True, choices=["wiki-ja", "wikifin-ja", "fin-ja", "wiki-en", "openwebtext"])
+    parser.add_argument("--input_corpus", type=str, required=True)
     parser.add_argument("--max_length", type=int, required=True)
     parser.add_argument("--dataset_type", type=str, required=True, choices=["linebyline", "nsp"])
     
