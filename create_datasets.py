@@ -84,7 +84,7 @@ def make_dataset(
             lambda example: _create_examples_from_document_for_linebyline(example, TOKENIZER),
             num_proc=None,
             batched=True,
-            batch_size=1,
+            batch_size=None,
             remove_columns=["tokens"],
             load_from_cache_file=False
         )
@@ -103,7 +103,7 @@ def make_dataset(
     else:
         raise ValueError(f"Invalid dataset_type, got {dataset_type}")
     # save processed data
-    processed_dataset.save_to_disk(processed_dataset_path)
+    processed_dataset.flatten_indices().save_to_disk(processed_dataset_path)
     logger.info(f"Processed dataset saved in {processed_dataset_path}")
 
 
@@ -116,59 +116,38 @@ def _sentence_to_ids(example,TOKENIZER, batched):
         tokens = [TOKENIZER.convert_tokens_to_ids(tk) for tk in tokens if tk]
     return {"tokens": tokens}
 
-def _create_examples_from_document_for_linebyline(document, TOKENIZER):
-    """Creates examples for a single document."""
+
+def _create_examples_from_document_for_linebyline(batch, TOKENIZER):
+    """Creates examples for documents."""
     block_size = MAX_LENGTH
     max_num_tokens = block_size - TOKENIZER.num_special_tokens_to_add(pair=False)
 
-    # We *usually* want to fill up the entire sequence since we are padding
-    # to `block_size` anyways, so short sequences are generally wasted
-    # computation. However, we *sometimes*
-    # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-    # sequences to minimize the mismatch between pretraining and fine-tuning.
-    # The `target_seq_length` is just a rough target however, whereas
-    # `block_size` is a hard limit.
-    target_seq_length = max_num_tokens
-    if random.random() < SHORT_SEQ_PROBABILITY:
-        target_seq_length = random.randint(5, max_num_tokens)
-
     current_chunk = []  # a buffer stored current working segments
     current_length = 0
-    i = 0
-    input_ids, token_type_ids = [], []
-    # for batched process, index must be 0
-    document = document["tokens"][0]
-    while i < len(document):
-        segment = document[i]
-        current_chunk.append(segment)
-        current_length += len(segment)
-        if i == len(document) - 1 or current_length >= target_seq_length:
-            if current_chunk:
-                current_chunk = list(itertools.chain.from_iterable(current_chunk))
-                """Truncates a pair of sequences to a maximum sequence length."""
-                while True:
-                    total_length = len(current_chunk)
-                    if total_length <= max_num_tokens:
-                        break
-                    # We want to sometimes truncate from the front and sometimes from the
-                    # back to add more randomness and avoid biases.
-                    if random.random() < 0.5:
-                        del current_chunk[0]
-                    else:
+    input_ids = []
+    for document in batch["tokens"]:
+        for segment in document:
+            current_chunk.append(segment)
+            current_length += len(segment)
+            if current_length >= max_num_tokens:
+                if current_chunk:
+                    current_chunk = list(itertools.chain.from_iterable(current_chunk))
+                    """Truncates a pair of sequences to a maximum sequence length."""
+                    while True:
+                        total_length = len(current_chunk)
+                        if total_length <= max_num_tokens:
+                            break
                         current_chunk.pop()
-
-                assert len(current_chunk) >= 1
-
-                # add special tokens
-                input_ids.append(TOKENIZER.build_inputs_with_special_tokens(current_chunk))
-                # add token type ids, 0 for sentence a, 1 for sentence b
-                token_type_ids.append(TOKENIZER.create_token_type_ids_from_sequences(current_chunk))
-
-            current_chunk = []
-            current_length = 0
-
-        i += 1
-    return {"input_ids": input_ids, "token_type_ids": token_type_ids}
+                    assert len(current_chunk) >= 1
+                    # add special tokens
+                    input_ids.append(TOKENIZER.build_inputs_with_special_tokens(current_chunk))
+                current_chunk = []
+                current_length = 0
+    else:
+        current_chunk = list(itertools.chain.from_iterable(current_chunk))
+        if len(current_chunk) >= max_num_tokens * 0.8:
+            input_ids.append(TOKENIZER.build_inputs_with_special_tokens(current_chunk))
+    return {"input_ids": input_ids}
 
 
 def _create_examples_from_document_for_nsp(document, doc_index, TOKENIZER):
@@ -185,7 +164,8 @@ def _create_examples_from_document_for_nsp(document, doc_index, TOKENIZER):
     # The `target_seq_length` is just a rough target however, whereas
     # `block_size` is a hard limit.
     target_seq_length = max_num_tokens
-    if random.random() < SHORT_SEQ_PROBABILITY:
+    short_seq_probability = 0.1
+    if random.random() < short_seq_probability:
         target_seq_length = random.randint(2, max_num_tokens)
 
     current_chunk = []  # a buffer stored current working segments
@@ -301,7 +281,6 @@ if __name__ == "__main__":
 
     # global variables
     datasets.config.IN_MEMORY_MAX_SIZE = 250 * 10**9
-    SHORT_SEQ_PROBABILITY = 0.1
     NSP_PROBABILITY = 0.5
     MAX_LENGTH = args.max_length
 
