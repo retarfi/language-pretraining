@@ -103,7 +103,7 @@ def make_dataset(
     else:
         raise ValueError(f"Invalid dataset_type, got {dataset_type}")
     # save processed data
-    processed_dataset.save_to_disk(processed_dataset_path)
+    processed_dataset.flatten_indices().save_to_disk(processed_dataset_path)
     logger.info(f"Processed dataset saved in {processed_dataset_path}")
 
 
