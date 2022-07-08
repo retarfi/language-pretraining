@@ -62,29 +62,29 @@ def make_dataset(
     del documents
     
     # tokenize
-    num_proc = 3
+    # num_proc = 3
     tokenized_dataset = inter_dataset.map(
-        lambda example: _sentence_to_ids(example, copy.copy(TOKENIZER), batched=True), 
+        lambda example: _sentence_to_ids(example, TOKENIZER, batched=True), 
         remove_columns=["sentence"],
-        num_proc=num_proc,
+        # num_proc=num_proc,
         batched=True,
         load_from_cache_file=False
-    )
+    ).flatten_indices()
+    del inter_dataset
     filtered_dataset = tokenized_dataset.filter(
         lambda example: len(example["tokens"])>0 and not (len(example["tokens"])==1 and len(example["tokens"][0])==0),
-        num_proc=None,
-    )
+        # num_proc=None,
+    ).flatten_indices()
     del tokenized_dataset
     logger.info("Tokenize finished")
-    del inter_dataset
-
+    
     # create_examples_from_document
     if dataset_type == "linebyline":
         processed_dataset = filtered_dataset.map(
             lambda example: _create_examples_from_document_for_linebyline(example, TOKENIZER),
             num_proc=None,
             batched=True,
-            batch_size=None,
+            batch_size=1000,
             remove_columns=["tokens"],
             load_from_cache_file=False
         )
@@ -103,6 +103,7 @@ def make_dataset(
     else:
         raise ValueError(f"Invalid dataset_type, got {dataset_type}")
     # save processed data
+    del filtered_dataset
     processed_dataset.flatten_indices().save_to_disk(processed_dataset_path)
     logger.info(f"Processed dataset saved in {processed_dataset_path}")
 
