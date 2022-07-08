@@ -14,10 +14,14 @@ from transformers.data.data_collator import DataCollatorForLanguageModeling
 from transformers import (
     BertConfig,
     BertForPreTraining,
+    DebertaV2Config
+    DebertaV2ForMaskedLM,
     ElectraConfig,
     logging,
     PreTrainedModel,
     PreTrainedTokenizerBase,
+    RobertaConfig,
+    RobertaForMaskedLM,
     TrainingArguments
 )
 logging.set_verbosity_info()
@@ -105,6 +109,68 @@ def get_model_electra(
     return model
 
 
+def get_model_roberta(
+        tokenizer:PreTrainedTokenizerBase,
+        load_pretrained:bool,
+        param_config:dict,
+    ) -> PreTrainedModel:
+    
+    if load_pretrained:
+        model = RobertaForMaskedLM.from_pretrained(param_config['pretrained_model_name_or_path'])
+        flozen_layers = param_config['flozen-layers']
+        if flozen_layers > -1:
+            for name, param in model.roberta.embeddings.named_parameters():
+                param.requires_grad = False
+            for i in range(flozen_layers):
+                for name, param in model.roberta.encoder.layer[i].named_parameters():
+                    param.requires_grad = False
+    else:
+        roberta_config = RobertaConfig(
+            pad_token_id = tokenizer.pad_token_id,
+            bos_token_id = tokenizer.cls_token_id,
+            eos_token_id = tokenizer.sep_token_id,
+            vocab_size = tokenizer.vocab_size, 
+            hidden_size = param_config['hidden-size'], 
+            num_hidden_layers = param_config['number-of-layers'],
+            num_attention_heads = param_config['attention-heads'],
+            intermediate_size = param_config['ffn-inner-hidden-size'],
+            max_position_embeddings = param_config['sequence-length'],
+        )
+        model = RobertaForMaskedLM(config=roberta_config)
+    return model
+
+
+def get_model_deberta(
+        tokenizer:PreTrainedTokenizerBase,
+        load_pretrained:bool,
+        param_config:dict,
+    ) -> PreTrainedModel:
+    
+    if load_pretrained:
+        model = DebertaV2ForMaskedLM.from_pretrained(param_config['pretrained_model_name_or_path'])
+        flozen_layers = param_config['flozen-layers']
+        if flozen_layers > -1:
+            for name, param in model.deberta.embeddings.named_parameters():
+                param.requires_grad = False
+            for i in range(flozen_layers):
+                for name, param in model.deberta.encoder.layer[i].named_parameters():
+                    param.requires_grad = False
+    else:
+        deberta_config = DebertaV2Config(
+            pad_token_id = tokenizer.pad_token_id,
+            bos_token_id = tokenizer.cls_token_id,
+            eos_token_id = tokenizer.sep_token_id,
+            vocab_size = tokenizer.vocab_size, 
+            hidden_size = param_config['hidden-size'], 
+            num_hidden_layers = param_config['number-of-layers'],
+            num_attention_heads = param_config['attention-heads'],
+            intermediate_size = param_config['ffn-inner-hidden-size'],
+            max_position_embeddings = param_config['sequence-length'],
+        )
+        model = DebertaV2ForMaskedLM(config=deberta_config)
+    return model
+
+
 def run_pretraining(
         tokenizer:PreTrainedTokenizerBase, 
         dataset_dir:str,
@@ -179,15 +245,19 @@ def run_pretraining(
         model = get_model_bert(tokenizer, load_pretrained, param_config)
     elif model_name == 'electra':
         model = get_model_electra(tokenizer, load_pretrained, param_config)
+    elif model_name == 'roberta':
+        model = get_model_roberta(tokenizer, load_pretrained, param_config)
+    elif model_name == 'deberta':
+        model = get_model_roberta(tokenizer, load_pretrained, param_config)
     logger.info(f'{model_name} model is loaded')    
 
     # data collator
-    if model_name == 'bert':
+    if model_name == ['bert', 'roberta', 'deberta']:
         mlm_probability = 0.15
     elif model_name == 'electra':
         mlm_probability = param_config['mask-percent']/100
     if do_whole_word_mask:
-        if model_name == 'bert':
+        if model_name == ['bert', 'roberta', 'deberta']:
             data_collator = utils.DataCollatorForWholeWordMask(
                 tokenizer = tokenizer, 
                 mlm = True,
@@ -204,7 +274,7 @@ def run_pretraining(
                 rate_unchanged = 0.15
             )
     else:
-        if model_name == 'bert':
+        if model_name == ['bert', 'roberta', 'deberta']:
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer = tokenizer,
                 mlm = True,
@@ -246,6 +316,10 @@ def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
         raise KeyError(f'{model_type} not in parameters.json')
     if 'electra-' in model_type.lower():
         model_name = 'electra'
+    elif 'roberta-' in model_type.lower():
+        model_name = 'roberta'
+    elif 'deberta-' in model_type.lower():
+        model_name = 'deberta'
     elif 'bert-' in model_type.lower():
         model_name = 'bert'
     else:
@@ -254,7 +328,7 @@ def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
     if len(param_config.keys() & {f'pretrained_{x}model_name_or_path' for x in ['', 'generator_', 'discriminator']}) > 0:
         load_pretrained = True
         set_assert = {'flozen-layers'}
-        if model_name == 'bert':
+        if model_name in ['bert', 'roberta', 'deberta']:
             set_assert = set_assert | {'pretrained_model_name_or_path'}
         if model_name == 'electra':
             set_assert = set_assert | {f'pretrained_{x}_model_name_or_path' for x in ['generator', 'discriminator']}
