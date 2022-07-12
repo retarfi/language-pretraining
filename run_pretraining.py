@@ -14,7 +14,7 @@ from transformers.data.data_collator import DataCollatorForLanguageModeling
 from transformers import (
     BertConfig,
     BertForPreTraining,
-    DebertaV2Config
+    DebertaV2Config,
     DebertaV2ForMaskedLM,
     ElectraConfig,
     logging,
@@ -54,6 +54,7 @@ def get_model_bert(
                     param.requires_grad = False
     else:
         bert_config = BertConfig(
+            pad_token_id = tokenizer.pad_token_id,
             vocab_size = tokenizer.vocab_size, 
             hidden_size = param_config['hidden-size'], 
             num_hidden_layers = param_config['number-of-layers'],
@@ -87,20 +88,24 @@ def get_model_electra(
     else:
         frac_generator = Fraction(param_config['generator-size'])
         config_generator = ElectraConfig(
+            pad_token_id = tokenizer.pad_token_id,
             vocab_size = tokenizer.vocab_size, 
             embedding_size = param_config['embedding-size'],
             hidden_size = int(param_config['hidden-size'] * frac_generator), 
             num_attention_heads = int(param_config['attention-heads'] * frac_generator),
             num_hidden_layers = param_config['number-of-layers'],
             intermediate_size = int(param_config['ffn-inner-hidden-size'] * frac_generator),
+            max_position_embeddings = param_config['sequence-length'],
         )
         config_discriminator = ElectraConfig(
+            pad_token_id = tokenizer.pad_token_id,
             vocab_size = tokenizer.vocab_size, 
             embedding_size = param_config['embedding-size'],
             hidden_size = param_config['hidden-size'], 
             num_attention_heads = param_config['attention-heads'],
             num_hidden_layers = param_config['number-of-layers'],
             intermediate_size = param_config['ffn-inner-hidden-size'],
+            max_position_embeddings = param_config['sequence-length'],
         )
         model = utils.ElectraForPretrainingModel(
             config_generator = config_generator,
@@ -134,7 +139,7 @@ def get_model_roberta(
             num_hidden_layers = param_config['number-of-layers'],
             num_attention_heads = param_config['attention-heads'],
             intermediate_size = param_config['ffn-inner-hidden-size'],
-            max_position_embeddings = param_config['sequence-length'],
+            max_position_embeddings = param_config['sequence-length'] + tokenizer.pad_token_id + 1,
         )
         model = RobertaForMaskedLM(config=roberta_config)
     return model
@@ -248,16 +253,16 @@ def run_pretraining(
     elif model_name == 'roberta':
         model = get_model_roberta(tokenizer, load_pretrained, param_config)
     elif model_name == 'deberta':
-        model = get_model_roberta(tokenizer, load_pretrained, param_config)
+        model = get_model_deberta(tokenizer, load_pretrained, param_config)
     logger.info(f'{model_name} model is loaded')    
 
     # data collator
-    if model_name == ['bert', 'roberta', 'deberta']:
+    if model_name in ['bert', 'roberta', 'deberta']:
         mlm_probability = 0.15
     elif model_name == 'electra':
         mlm_probability = param_config['mask-percent']/100
     if do_whole_word_mask:
-        if model_name == ['bert', 'roberta', 'deberta']:
+        if model_name in ['bert', 'roberta', 'deberta']:
             data_collator = utils.DataCollatorForWholeWordMask(
                 tokenizer = tokenizer, 
                 mlm = True,
@@ -274,7 +279,7 @@ def run_pretraining(
                 rate_unchanged = 0.15
             )
     else:
-        if model_name == ['bert', 'roberta', 'deberta']:
+        if model_name in ['bert', 'roberta', 'deberta']:
             data_collator = DataCollatorForLanguageModeling(
                 tokenizer = tokenizer,
                 mlm = True,
@@ -309,7 +314,7 @@ def run_pretraining(
 def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
     """
     Return
-    model_name: str, bert or electra
+    model_name: str, bert, deberta, electra, or roberta
     load_pretrained: bool, True when further pretrain and False when pretrain from scratch
     """
     if model_type not in param_config:
@@ -358,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_dir", type=str, required=True, help="directory of corpus dataset")
     parser.add_argument('--model_dir', type=str, required=True)
     parser.add_argument('--parameter_file', type=str, required=True, help="json file defining model parameters")
-    parser.add_argument('--model_type', type=str, required=True, help="model parameter defined in the parameter_file. It must contain 'bert-' or 'electra-'")
+    parser.add_argument('--model_type', type=str, required=True, help="model parameter defined in the parameter_file. It must contain 'bert-', 'deberta-', 'electra-', or 'roberta-'")
     # optional
     parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
                         help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
@@ -375,7 +380,7 @@ if __name__ == "__main__":
     assert not (args.tokenizer_type=='sentencepiece' and args.do_whole_word_mask), 'Whole Word Masking cannot be applied with sentencepiece tokenizer'
 
     # global variables
-    datasets.config.IN_MEMORY_MAX_SIZE = 120 * 10**9
+    datasets.config.IN_MEMORY_MAX_SIZE = 50 * 10**9
 
     # parameter configuration
     with open(args.parameter_file, 'r') as f:
