@@ -129,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_dir', required=True, type=str)
     parser.add_argument('--language', type=str, default='ja', choices=['ja', 'en'])
     # split option
-    parser.add_argument('--intermediate_dir', type=str, default='')
+    parser.add_argument('--intermediate_dir', type=str, default='tmp')
     parser.add_argument('--num_files', type=int, default=1)
     # pre-tokenize option
     parser.add_argument('--pretokenized_prefix', type=str, default='_pretokenized')
