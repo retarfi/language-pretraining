@@ -14,32 +14,31 @@ import fugashi
 from tqdm import tqdm
 from tokenizers import normalizers, SentencePieceBPETokenizer, BertWordPieceTokenizer
 
+from utils import get_word_tokenizer
+
 def mp_tokenize(
-        input_txt:str,
-        output_txt:str,
-        mecab_dic_type: str,
-        mecab_option: str,
-        num_file:int
-    ) -> None:
+    input_txt: str,
+    output_txt: str,
+    num_file: int,
+    word_tokenizer_type: str,
+    mecab_dic_type: str,
+    mecab_option: str,
+    sudachi_split_mode: Optional[str],
+    sudachi_config_path: Optional[str],
+    sudachi_resource_dir: Optional[str],
+    sudachi_dict_type: Optional[str]
+) -> None:
 
-    option = '-Owakati '
-    if mecab_dic_type != '':
-        if mecab_dic_type == "unidic_lite":
-            import unidic_lite
-            option += f'-d {unidic_lite.DICDIR} '
-        elif mecab_dic_type == "unidic":
-            import unidic
-            option += f'-d {unidic.DICDIR} '
-        elif mecab_dic_type == "ipadic":
-            import ipadic
-            option += f'-d {ipadic.DICDIR} '
-        else:
-            raise ValueError("Invalid mecab_dic_type is specified.")
-
-    if mecab_option != '':
-        option += f'-r {mecab_option}'
-
-    tagger = fugashi.GenericTagger(option)
+    main_tokenizer = get_word_tokenizer(
+        word_tokenizer_type=word_tokenizer_type,
+        do_lower_case=False,
+        mecab_dic=mecab_dic_type,
+        mecab_option=mecab_option,
+        sudachi_split_mode=sudachi_split_mode,
+        sudachi_config_path=sudachi_config_path,
+        sudachi_resource_dir=sudachi_resource_dir,
+        sudachi_dict_type=sudachi_dict_type
+    )
     if num_file == 0:
         line_all = int(subprocess.run(['wc', '-l', input_txt], encoding='utf-8', stdout=subprocess.PIPE).stdout.split()[0])
         pbar = tqdm(total=line_all)
@@ -48,7 +47,8 @@ def mp_tokenize(
             if line == '\n':
                 outfile.write('\n')
             else:
-                outfile.write(tagger.parse(line.strip()) + '\n')
+                # outfile.write(tagger.parse(line.strip()) + '\n')
+                outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + '\n')
             if num_file == 0:
                 pbar.update(1)
     if num_file == 0:
@@ -56,15 +56,15 @@ def mp_tokenize(
 
 
 def train_tokenizer(
-        input_file_or_dir:str,
-        output_dir:str,
-        vocab_size:int,
-        min_frequency:int,
-        limit_alphabet:int,
-        num_unused_tokens:int,
-        tokenizer_type:str,
-        language:str
-    ) -> None:
+    input_file_or_dir:str,
+    output_dir:str,
+    vocab_size:int,
+    min_frequency:int,
+    limit_alphabet:int,
+    num_unused_tokens:int,
+    tokenizer_type:str,
+    language:str
+) -> None:
 
     if os.path.isfile(input_file_or_dir):
         files = [input_file_or_dir]
@@ -73,22 +73,23 @@ def train_tokenizer(
     else:
         raise ValueError('argument input_file_or_dir must be text file or directory which consists .txt files.')
     
-    # Initialize a tokenizer
+    logger.info('Train tokenizer...')
     if tokenizer_type=='sentencepiece':
-        tokenizer = SentencePieceBPETokenizer(
-            unk_token="[UNK]", 
-            add_prefix_space=False, # 文頭に自動でスペースを追加しない
+        special_tokens = ['<unused{}>'.format(i) for i in range(args.num_unused_tokens)]
+        import sentencepiece as spm
+        spm.SentencePieceTrainer.Train(
+            input=files,
+            # model_dir=output_dir,
+            vocab_size=vocab_size,
+            model_prefix=os.path.join(output_dir, 'spiece'),
+            character_coverage=0.9995,
+            num_threads=os.cpu_count(),
+            unk_piece="[UNK]",
+            bos_piece="[CLS]",
+            eos_piece="[SEP]",
+            pad_piece="[PAD]",
+            user_defined_symbols=','.join(special_tokens)
         )
-        # 改行がinput_fileにあるとtokenも改行がついてくるのでstrip
-        # cf. https://github.com/huggingface/tokenizers/issues/231
-        tokenizer.normalizer = normalizers.Sequence([
-            normalizers.Strip(),
-            normalizers.NFKC(),
-            # normalizers.BertNormalizer(
-            #     handle_chinese_chars = False,
-            #     lowercase = True,
-            # )
-        ])
     elif tokenizer_type=='wordpiece':
         if language == 'ja':
             tokenizer = BertWordPieceTokenizer(
@@ -102,46 +103,60 @@ def train_tokenizer(
                 strip_accents=None, # determined by the value for lowercase
                 lowercase=True
             )
+        special_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+        special_tokens += ['<unused{}>'.format(i) for i in range(args.num_unused_tokens)]
+        tokenizer.train(
+            files = files, 
+            vocab_size = vocab_size,
+            min_frequency = min_frequency,
+            limit_alphabet = limit_alphabet,
+            special_tokens = special_tokens
+        )
+        # save tokenizer
+        os.makedirs(output_dir, exist_ok=True)
+        tokenizer.save_model(output_dir)
     else:
-        raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')    
-
-    logger.info('Train tokenizer...')
-    special_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
-    special_tokens += ['<unused{}>'.format(i) for i in range(args.num_unused_tokens)]
-    tokenizer.train(
-        files = files, 
-        vocab_size = vocab_size, 
-        min_frequency = min_frequency, 
-        limit_alphabet = limit_alphabet,
-        special_tokens = special_tokens
-    )
-
-    # save tokenizer
-    os.makedirs(output_dir, exist_ok=True)
-    tokenizer.save_model(output_dir)
+        raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')
     logger.info('Tokenizer saved.')
 
     
 if __name__ == "__main__":
     # arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument('--word_tokenizer', required=True, type=str, choices=['mecab', 'juman', 'sudachi', 'spacy-luw', 'none', 'basic'])
     parser.add_argument('--input_file', required=True, type=str)
     parser.add_argument('--model_dir', required=True, type=str)
     parser.add_argument('--language', type=str, default='ja', choices=['ja', 'en'])
-    # split option
+    # parallel option
     parser.add_argument('--intermediate_dir', type=str, default='tmp')
     parser.add_argument('--num_files', type=int, default=1)
-    # pre-tokenize option
+    # pre-tokenize(mainword) option
     parser.add_argument('--pretokenized_prefix', type=str, default='_pretokenized')
-    parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
-    parser.add_argument('--mecab_option', type=str, default='')
-    # train tokenize option
+    parser.add_argument('--disable_normalize_text', action='store_false')
+    # subword training option
     parser.add_argument('--tokenizer_type', required=True, type=str, choices=['sentencepiece', 'wordpiece'])
     parser.add_argument('--vocab_size', type=int, default=32768)
-    parser.add_argument('--min_frequency', type=int, default=2)
-    parser.add_argument('--limit_alphabet', type=int, default=6129)
+    parser.add_argument('--min_frequency', type=int, default=2, help='only wordpiece')
+    parser.add_argument('--limit_alphabet', type=int, default=6129, help='only wordpiece')
     parser.add_argument('--num_unused_tokens', type=int, default=10)
+    # mecab option
+    parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
+    parser.add_argument('--mecab_option', type=str, default='')
+    # sudachi option
+    parser.add_argument('--sudachi_split_mode', default='C', choices=['A', 'B', 'C'])
+    parser.add_argument('--sudachi_config_path')
+    parser.add_argument('--sudachi_resource_dir')
+    parser.add_argument('--sudachi_dict_type')
     args = parser.parse_args()
+
+    # assertion
+    if args.language == 'ja':
+        assert args.word_tokenizer != 'basic'
+    elif args.language == 'en':
+        assert args.word_tokenizer in ['none', 'basic']
+    else:
+        raise ValueError('Invalid argument language')
+
     if '.txt' not in args.input_file:
         raise ValueError('input_file must be a txt file')
     if args.num_files < 1:
@@ -191,18 +206,38 @@ if __name__ == "__main__":
         if args.num_files == 1:
             input_plib_file = pathlib.Path(args.input_file)
             pretokenized_plib_file = input_plib_file.parent.joinpath(input_plib_file.stem + args.pretokenized_prefix + '.txt')
-            mp_tokenize(str(input_plib_file), str(pretokenized_plib_file), args.mecab_dic_type, args.mecab_option, 0)
+            mp_tokenize(
+                input_txt=str(input_plib_file),
+                output_txt=str(pretokenized_plib_file),
+                num_file=0,
+                word_tokenizer_type=args.word_tokenizer,
+                mecab_dic_type=args.mecab_dic_type,
+                mecab_option=args.mecab_option,
+                sudachi_split_mode=args.sudachi_split_mode,
+                sudachi_config_path=args.sudachi_config_path,
+                sudachi_resource_dir=args.sudachi_resource_dir,
+                sudachi_dict_type=args.sudachi_dict_type
+            )
             logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_file)}')
             input_file_or_dir = str(pretokenized_plib_file)
         else:
             pretokenized_plib_dir = intermediate_plib_dir.parent.joinpath(intermediate_plib_dir.stem + args.pretokenized_prefix)
             os.makedirs(pretokenized_plib_dir, exist_ok=True)
             with mp.Pool(args.num_files) as pool:
-                mp_task = [pool.apply_async(mp_tokenize, (
-                    str((intermediate_plib_dir / f'{i}.txt').resolve()),
-                    str((pretokenized_plib_dir / f'{i}.txt').resolve()),
-                    args.mecab_dic_type, args.mecab_option, i
-                )) for i in range(cnt_file+1)]
+                mp_task = [pool.apply_async(
+                    mp_tokenize, (
+                        str((intermediate_plib_dir / f'{i}.txt').resolve()),
+                        str((pretokenized_plib_dir / f'{i}.txt').resolve()),
+                        i,
+                        args.word_tokenizer,
+                        args.mecab_dic_type,
+                        args.mecab_option,
+                        args.sudachi_split_mode,
+                        args.sudachi_config_path,
+                        args.sudachi_resource_dir,
+                        args.sudachi_dict_type
+                    )
+                ) for i in range(cnt_file+1)]
                 _ = [f.get() for f in mp_task]
             logger.info(f'Pre-tokenized files are saved in {str(pretokenized_plib_dir)}')
             input_file_or_dir = str(pretokenized_plib_dir)
