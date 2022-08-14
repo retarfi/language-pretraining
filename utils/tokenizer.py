@@ -116,7 +116,7 @@ def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
         mecab_option=args.mecab_option,
         sudachi_split_mode=args.sudachi_split_mode,
         sudachi_config_path=args.sudachi_config_path,
-        sudachi_resource_dir=args.resource_dir,
+        sudachi_resource_dir=args.sudachi_resource_dir,
         sudachi_dict_type=args.sudachi_dict_type,
         sp_model_kwargs=args.sp_model_kwargs,
         unk_token=args.unk_token,
