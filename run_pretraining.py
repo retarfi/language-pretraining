@@ -186,6 +186,8 @@ def run_pretraining(
         fp16_type:int,
         do_whole_word_mask:bool,
         do_continue:bool,
+        use_deepspeed:bool,
+        deepspeed_bucket_size:float,
         node_rank:int,
         local_rank:int,
         run_name:str
@@ -203,6 +205,56 @@ def run_pretraining(
         per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
     else:
         per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
+    if use_deepspeed:
+        deepspeed = {
+            "fp16": {
+                "enabled": "auto",
+                "loss_scale": 0,
+                "loss_scale_window": 1000,
+                "initial_scale_power": 16,
+                "hysteresis": 2,
+                "min_loss_scale": 1
+            },
+            "optimizer": {
+                "type": "AdamW",
+                "params": {
+                    "lr": "auto",
+                    "betas": "auto",
+                    "eps": "auto",
+                    "weight_decay": "auto"
+                }
+            },
+            "scheduler": {
+                "type": "WarmupDecayLR",
+                "params": {
+                    "warmup_min_lr": "auto",
+                    "warmup_max_lr": "auto",
+                    "warmup_num_steps": "auto",
+                    "total_num_steps": "auto"
+                }
+            },
+            "zero_optimization": {
+                "stage": 2,
+                "offload_optimizer": {
+                    "device": "cpu",
+                    "pin_memory": True
+                },
+                "allgather_partitions": True,
+                "allgather_bucket_size": deepspeed_bucket_size,
+                "overlap_comm": True,
+                "reduce_scatter": True,
+                "reduce_bucket_size": deepspeed_bucket_size,
+                "contiguous_gradients": True
+            },
+            "gradient_accumulation_steps": "auto",
+            "gradient_clipping": "auto",
+            "steps_per_print": param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000,
+            "train_batch_size": sum(param_config['batch-size'].values()),
+            "train_micro_batch_size_per_gpu": per_device_train_batch_size,
+            "wall_clock_breakdown": False
+        }
+    else:
+        deepspeed = None
     # initialize
     training_args = TrainingArguments(
         output_dir = model_dir,
@@ -230,14 +282,12 @@ def run_pretraining(
         dataloader_num_workers = 3,
         dataloader_pin_memory=False,
         local_rank = local_rank,
-        report_to = "tensorboard"
+        report_to = "tensorboard",
+        deepspeed = deepspeed
     )
     if not do_continue:
         if local_rank != -1:
-            if torch.cuda.device_count() > 0:
-                training_args.per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
-            else:
-                training_args.per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
+            training_args.per_device_train_batch_size = per_device_train_batch_size
         torch.save(training_args, os.path.join(model_dir, "training_args.bin"))
 
     # dataset
@@ -292,7 +342,6 @@ def run_pretraining(
                 mlm_probability = mlm_probability
             )
     logger.info('Datacollator was complete.')
-    # TODO: implement deepspeed
     trainer = utils.MyTrainer(
         model = model,
         args = training_args,
@@ -369,11 +418,13 @@ if __name__ == "__main__":
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
+    parser.add_argument('--use_deepspeed', action='store_true')
+    parser.add_argument('--deepspeed_bucket_size', type=float, default=5e8)
     parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
     utils.add_arguments_for_tokenizer(parser)
     args = parser.parse_args()
-    assert not (args.tokenizer_type=='sentencepiece' and args.do_whole_word_mask), 'Whole Word Masking cannot be applied with sentencepiece tokenizer'
+    assert not (args.subword_tokenizer=='sentencepiece' and args.do_whole_word_mask), 'Whole Word Masking cannot be applied with sentencepiece tokenizer'
     utils.assert_arguments_for_tokenizer(args)
 
     # global variables
@@ -396,6 +447,8 @@ if __name__ == "__main__":
         fp16_type = args.fp16_type,
         do_whole_word_mask = args.do_whole_word_mask,
         do_continue = args.do_continue,
+        use_deepspeed = args.use_deepspeed,
+        deepspeed_bucket_size = args.deepspeed_bucket_size,
         node_rank = args.node_rank,
         local_rank = args.local_rank,
         run_name = args.run_name,
