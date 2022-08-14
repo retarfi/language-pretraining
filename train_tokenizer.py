@@ -74,6 +74,7 @@ def train_tokenizer(
         raise ValueError('argument input_file_or_dir must be text file or directory which consists .txt files.')
     
     logger.info('Train tokenizer...')
+    os.makedirs(output_dir, exist_ok=True)
     if tokenizer_type=='sentencepiece':
         special_tokens = ['<unused{}>'.format(i) for i in range(args.num_unused_tokens)]
         import sentencepiece as spm
@@ -84,6 +85,7 @@ def train_tokenizer(
             model_prefix=os.path.join(output_dir, 'spiece'),
             character_coverage=0.9995,
             num_threads=os.cpu_count(),
+            train_extremely_large_corpus=True,
             unk_piece="[UNK]",
             bos_piece="[CLS]",
             eos_piece="[SEP]",
@@ -113,7 +115,6 @@ def train_tokenizer(
             special_tokens = special_tokens
         )
         # save tokenizer
-        os.makedirs(output_dir, exist_ok=True)
         tokenizer.save_model(output_dir)
     else:
         raise ValueError(f'Invalid tokenizer_type {tokenizer_type}.')
@@ -137,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument('--tokenizer_type', required=True, type=str, choices=['sentencepiece', 'wordpiece'])
     parser.add_argument('--vocab_size', type=int, default=32768)
     parser.add_argument('--min_frequency', type=int, default=2, help='only wordpiece')
-    parser.add_argument('--limit_alphabet', type=int, default=6129, help='only wordpiece')
+    parser.add_argument('--limit_alphabet', type=int, default=2900, help='only wordpiece')
     parser.add_argument('--num_unused_tokens', type=int, default=10)
     # mecab option
     parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])

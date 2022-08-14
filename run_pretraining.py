@@ -292,7 +292,7 @@ def run_pretraining(
                 mlm_probability = mlm_probability
             )
     logger.info('Datacollator was complete.')
-    
+    # TODO: implement deepspeed
     trainer = utils.MyTrainer(
         model = model,
         args = training_args,
@@ -356,10 +356,8 @@ def assert_config(param_config:dict, model_type:str, local_rank:int) -> bool:
 
 if __name__ == "__main__":
     # arguments
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # required
-    parser.add_argument('--tokenizer_name_or_path', type=str, required=True, 
-                        help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
     parser.add_argument("--dataset_dir", type=str, required=True, help="directory of corpus dataset")
     parser.add_argument('--model_dir', type=str, required=True)
     parser.add_argument('--parameter_file', type=str, required=True, help="json file defining model parameters")
@@ -368,16 +366,15 @@ if __name__ == "__main__":
     parser.add_argument('--fp16_type', type=int, default=0, choices=[0,1,2,3], 
                         help='default:0(disable), see https://nvidia.github.io/apex/amp.html for detail')
     
-    parser.add_argument('--tokenizer_type', type=str, default='', choices=['', 'sentencepiece', 'wordpiece'])
-    parser.add_argument('--mecab_dic_type', type=str, default='', choices=['', 'unidic_lite', 'unidic', 'ipadic'])
     parser.add_argument('--run_name', type=str, default='')
     parser.add_argument('--do_whole_word_mask', action='store_true')
     parser.add_argument('--do_continue', action='store_true')
     parser.add_argument('--node_rank', type=int, default=-1)
     parser.add_argument('--local_rank', type=int, default=-1)
-
+    utils.add_arguments_for_tokenizer(parser)
     args = parser.parse_args()
     assert not (args.tokenizer_type=='sentencepiece' and args.do_whole_word_mask), 'Whole Word Masking cannot be applied with sentencepiece tokenizer'
+    utils.assert_arguments_for_tokenizer(args)
 
     # global variables
     datasets.config.IN_MEMORY_MAX_SIZE = 50 * 10**9
@@ -387,11 +384,8 @@ if __name__ == "__main__":
         param_config = json.load(f)
     model_name, load_pretrained = assert_config(param_config, args.model_type, args.local_rank)
     
-    tokenizer = utils.load_tokenizer(
-        tokenizer_name_or_path = args.tokenizer_name_or_path,
-        tokenizer_type = args.tokenizer_type,
-        mecab_dic_type = args.mecab_dic_type,
-    )
+    tokenizer = utils.load_tokenizer(args)
+
     run_pretraining(
         tokenizer = tokenizer,
         dataset_dir = args.dataset_dir,

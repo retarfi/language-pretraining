@@ -263,9 +263,8 @@ def _create_examples_from_document_for_nsp(document, doc_index, TOKENIZER):
 
 if __name__ == "__main__":
     # arguments
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # required
-    parser.add_argument("--tokenizer_name_or_path", type=str, required=True, help="uploaded name in HuggingFace Hub or directory path containing vocab.txt")
     parser.add_argument("--input_corpus", type=str, required=True)
     parser.add_argument("--max_length", type=int, required=True)
     parser.add_argument("--dataset_type", type=str, required=True, choices=["linebyline", "nsp"])
@@ -273,12 +272,12 @@ if __name__ == "__main__":
     # optional
     parser.add_argument("--input_file", type=str, default="")
     parser.add_argument("--dataset_dir", type=str, default="./datasets/", help="directory which saves each dataset")
-    parser.add_argument("--tokenizer_type", type=str, default="", choices=["", "sentencepiece", "wordpiece"])
-    parser.add_argument("--mecab_dic_type", type=str, default="", choices=["", "unidic_lite", "unidic", "ipadic"])
     parser.add_argument("--cache_dir", type=str, default="./.cache/datasets/")
-    
+    utils.add_arguments_for_tokenizer(parser)
+
     args = parser.parse_args()
     assert args.input_corpus in ["wiki-en", "openwebtext"] or args.input_file != "", "input_file must be specified with japanese corpus"
+    utils.assert_arguments_for_tokenizer(args)
 
     # global variables
     datasets.config.IN_MEMORY_MAX_SIZE = 250 * 10**9
@@ -297,11 +296,7 @@ if __name__ == "__main__":
     sh.setFormatter(formatter)
     logger.addHandler(sh)
 
-    TOKENIZER = utils.load_tokenizer(
-        tokenizer_name_or_path=args.tokenizer_name_or_path,
-        tokenizer_type=args.tokenizer_type,  
-        mecab_dic_type=args.mecab_dic_type,
-    )
+    TOKENIZER = utils.load_tokenizer(args)
 
     dataset = make_dataset(
         input_corpus=args.input_corpus,

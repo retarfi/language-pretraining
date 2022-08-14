@@ -1,6 +1,11 @@
 from .data_collator import DataCollatorForWholeWordMask, DataCollatorForLanguageModelingWithElectra
 from .model import ElectraForPretrainingModel
-from .tokenizer import load_tokenizer, get_word_tokenizer
+from .tokenizer import (
+    add_arguments_for_tokenizer,
+    assert_arguments_for_tokenizer,
+    get_word_tokenizer,
+    load_tokenizer
+)
 from .torch_version import TorchVersion
 from .trainer import MyTrainer
 from .training_args import _setup_devices
