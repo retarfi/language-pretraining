@@ -205,6 +205,8 @@ def run_pretraining(
         per_device_train_batch_size = int(param_config['batch-size'][str(node_rank)] / torch.cuda.device_count())
     else:
         per_device_train_batch_size = param_config['batch-size'][str(node_rank)]
+    logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000
+    gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps']
     if use_deepspeed:
         deepspeed = {
             "fp16": {
@@ -248,8 +250,8 @@ def run_pretraining(
             },
             "gradient_accumulation_steps": "auto",
             "gradient_clipping": "auto",
-            "steps_per_print": param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000,
-            "train_batch_size": sum(param_config['batch-size'].values()),
+            "steps_per_print": logging_steps * gradient_accumulation_steps,
+            "train_batch_size": sum(param_config['batch-size'].values()) * gradient_accumulation_steps,
             "train_micro_batch_size_per_gpu": per_device_train_batch_size,
             "wall_clock_breakdown": False
         }
@@ -270,7 +272,7 @@ def run_pretraining(
         logging_dir = os.path.join(os.path.dirname(__file__), f"runs/{run_name}"),
         save_steps = param_config['save-steps'] if 'save-steps' in param_config.keys() else 50000, #default:500
         save_strategy = "steps", # default:"steps"
-        logging_steps = param_config['logging-steps'] if 'logging-steps' in param_config.keys() else 5000, # default:500
+        logging_steps = logging_steps,
         save_total_limit = 20, # optional
         seed = 42, # default
         fp16 = bool(fp16_type!=0),
@@ -278,7 +280,7 @@ def run_pretraining(
         #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm = True,
         max_steps = param_config['train-steps'],
-        gradient_accumulation_steps = 1 if 'accumulation-steps' not in param_config.keys() else param_config['accumulation-steps'],
+        gradient_accumulation_steps = gradient_accumulation_steps,
         dataloader_num_workers = 3,
         dataloader_pin_memory=False,
         local_rank = local_rank,
