@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "language-pretraining"
+version = "v2.1.0"
+description = "Pre-training Language Models for Japanese"
+authors = ["Masahiro Suzuki <b2019msuzuki@socsim.org>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "language_pretraining"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+datasets = "^1.10.0"
+fugashi = "^1.1.0"
+tensorflow = "^2.5.0"
+tqdm = "^4.63.0"
+transformers = "^4.9.2"
+tokenizers = "^0.10.0"
+torch = "^1.8.0"
+ipadic = "^1.0.0"
+unidic-lite = "1.0.8"
+jptranstokenizer = "^0.1.0"
+sentencepiece = "^0.1.96"
+ja-gsdluw = {url = "https://github.com/megagonlabs/UD_Japanese-GSD/releases/download/r2.9-NE/ja_gsdluw-3.2.0-py3-none-any.whl"}
+unidic = "^1.1.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^22.6.0"
+isort = "^5.10.1"
+mypy = "^0.971"
+pytest = "^7.1.2"
+spacy = "^3.2.0"
+SudachiTra = "^0.1.7"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
