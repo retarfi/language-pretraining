@@ -253,7 +253,7 @@ def get_mask_datacollator(
     do_whole_word_mask: bool,
     tokenizer: PreTrainedTokenizerBase,
     mlm_probability: float,
-):
+) -> DataCollatorMixin:
     class_datacollator: DataCollatorMixin
     if do_whole_word_mask:
         if model_name in ["bert", "roberta", "deberta"]:
