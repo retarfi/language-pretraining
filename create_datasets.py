@@ -11,8 +11,10 @@ import datasets
 import torch
 from datasets import Dataset
 from jptranstokenizer import JapaneseTransformerTokenizer
+from transformers import BatchEncoding
 
 import utils
+from utils.data_collator import get_mask_datacollator
 from utils.logger import make_logger_setting
 
 
@@ -29,9 +31,11 @@ def make_dataset(
     input_corpus: str,
     input_file: str,
     dataset_type: str,
+    mask_style: str,
     tokenizer: JapaneseTransformerTokenizer,
     max_length: int,
     do_save: bool = True,
+    mlm_probability: float = 0.15,
     dataset_dir: str = "./datasets",
     cache_dir: str = "./.cache/datasets",
 ) -> Union[
@@ -42,27 +46,23 @@ def make_dataset(
     datasets.iterable_dataset.IterableDataset,
 ]:
 
-    processed_dataset_path: str = os.path.join(
-        dataset_dir, f"{dataset_type}_{max_length}_{input_corpus}"
-    )
-
     # make sentences
     documents: List[List[str]] = [[]]
-    dataset: dataset.DatasetDict
     if input_corpus in ["wiki-en", "openwebtext"]:
+        loaded_ds: dataset.DatasetDict
         if input_corpus == "wiki-en":
-            dataset = datasets.load_dataset(
+            loaded_ds = datasets.load_dataset(
                 "wikipedia", "20200501.en", cache_dir=cache_dir, split="train"
             )["text"]
         elif input_corpus == "openwebtext":
-            dataset = datasets.load_dataset(
+            loaded_ds = datasets.load_dataset(
                 "openwebtext", cache_dir=cache_dir, split="train"
             )["text"]
         else:
             raise ValueError(f"Invalid input_corpus, got {input_corpus}")
         import nltk
 
-        for d in dataset:
+        for d in loaded_ds:
             for paragraph in d.split("\n"):
                 if len(paragraph) < 80:
                     continue
@@ -87,31 +87,34 @@ def make_dataset(
                     documents[-1].append(line)
     if documents[-1] == []:
         documents.pop(-1)
-    inter_dataset: Dataset = Dataset.from_dict({"sentence": documents})
+    ds: Dataset = Dataset.from_dict({"sentence": documents})
     del documents
 
     # tokenize
     # num_proc = 3
-    tokenized_dataset: Dataset = inter_dataset.map(
+    ds = ds.map(
         lambda example: _sentence_to_ids(example, tokenizer, batched=True),
         remove_columns=["sentence"],
         # num_proc=num_proc,
         batched=True,
         load_from_cache_file=False,
     ).flatten_indices()
-    del inter_dataset
-    filtered_dataset: Dataset = tokenized_dataset.filter(
+    ds = ds.filter(
         lambda example: len(example["tokens"]) > 0
         and not (len(example["tokens"]) == 1 and len(example["tokens"][0]) == 0),
         # num_proc=None,
     ).flatten_indices()
-    del tokenized_dataset
     logger.info("Tokenize finished")
 
     # create_examples_from_document
-    processed_dataset: Dataset
+    if dataset_type == "" or mask_style != "none":
+        # decide dataset_type from mask_style
+        if mask_style.split("-")[0] == "bert":
+            dataset_type = "nsp"
+        else:
+            dataset_type = "linebyline"
     if dataset_type == "linebyline":
-        processed_dataset = filtered_dataset.map(
+        ds = ds.map(
             lambda example: _create_examples_from_document_for_linebyline(
                 example, tokenizer, max_length
             ),
@@ -123,8 +126,8 @@ def make_dataset(
         )
     elif dataset_type == "nsp":
         global REF_DATASET
-        REF_DATASET = copy.copy(filtered_dataset)
-        processed_dataset = filtered_dataset.map(
+        REF_DATASET = copy.copy(ds)
+        ds = ds.map(
             lambda example, idx: _create_examples_from_document_for_nsp(
                 example, idx, tokenizer, max_length
             ),
@@ -135,14 +138,40 @@ def make_dataset(
             remove_columns=["tokens"],
             load_from_cache_file=False,
         )
+        del REF_DATASET
     else:
         raise ValueError(f"Invalid dataset_type, got {dataset_type}")
+
+    # apply masking
+    if mask_style != "none":
+        do_whole_word_mask: bool
+        if mask_style[-4:] == "-wwm":
+            do_whole_word_mask = True
+        else:
+            do_whole_word_mask = False
+        data_collator = get_mask_datacollator(
+            model_name=mask_style.split("-")[0],
+            do_whole_word_mask=do_whole_word_mask,
+            tokenizer=tokenizer,
+            mlm_probability=mlm_probability,
+        )
+        # example: Dict[str, Union[List[int], int]]
+        # data_collator: List[Dict[str, Union[List[int], int]]] -> BatchEncoding[str, torch.tensor(size: (1) or(1, max_length))]
+        # _convert_batchencoding_to_dict: BatchEncoding -> Dict[str, Union[List[int], int]]:
+        ds = ds.map(
+            lambda example: _convert_batchencoding_to_dict(data_collator([example.data]))
+        )
+
     # save processed data
-    del filtered_dataset
     if do_save:
-        processed_dataset.flatten_indices().save_to_disk(processed_dataset_path)
+        processed_dataset_path: str = os.path.join(
+            dataset_dir, f"{dataset_type}_{max_length}_{input_corpus}"
+        )
+        if mask_style != "none":
+            processed_dataset_path += mask_style
+        ds.flatten_indices().save_to_disk(processed_dataset_path)
         logger.info(f"Processed dataset saved in {processed_dataset_path}")
-    return processed_dataset
+    return ds
 
 
 def _sentence_to_ids(
@@ -340,25 +369,62 @@ def _create_examples_from_document_for_nsp(
     }
 
 
+def _convert_batchencoding_to_dict(
+    batch: BatchEncoding,
+) -> Dict[str, Union[List[int], int]]:
+    dct: Dict[str, Union[List[int], int]] = {k: v.tolist()[0] for k, v in batch.items()}
+    return dct
+
+
 if __name__ == "__main__":
     # arguments
     parser: argparse.Namespace = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # required
-    parser.add_argument("--input_corpus", type=str, required=True)
-    parser.add_argument("--max_length", type=int, required=True)
     parser.add_argument(
-        "--dataset_type", type=str, required=True, choices=["linebyline", "nsp"]
+        "--input_corpus",
+        type=str,
+        required=True,
+        help=(
+            "Directory name for created dataset."
+            "Other affixes are also added to this."
+        ),
     )
+    parser.add_argument("--max_length", type=int, required=True)
 
     # optional
+    parser.add_argument(
+        "--dataset_type",
+        type=str,
+        default="",
+        choices=["linebyline", "nsp", ""],
+        help=(
+            "This must be specified when --mask_style is none."
+            "Overwritten when --mask_sytle is other than none"
+        ),
+    )
     parser.add_argument("--input_file", type=str, default="")
+    lst_mask_style: List[str] = ["none"] + list(
+        itertools.product(["bert", "debertav2", "electra", "roberta"], ["", "-wwm"])
+    )
+    parser.add_argument(
+        "--mask_style",
+        type=str,
+        default="none",
+        choices=lst_mask_style,
+        help=(
+            "If none (default), no masking."
+            "If other choice, masking is applied."
+            "'-wwm' means applying whole-word-masking."
+        ),
+    )
+    parser.add_argument("--mlm_probability", type=float, default=0.15)
     parser.add_argument(
         "--dataset_dir",
         type=str,
         default="./datasets/",
-        help="directory which saves each dataset",
+        help="Directory which saves each dataset",
     )
     parser.add_argument("--cache_dir", type=str, default="./.cache/datasets/")
     utils.add_arguments_for_tokenizer(parser)
@@ -367,6 +433,14 @@ if __name__ == "__main__":
     assert (
         args.input_corpus in ["wiki-en", "openwebtext"] or args.input_file != ""
     ), "input_file must be specified with japanese corpus"
+    assert (
+        args.dataset_type != "" or args.mask_style != "none"
+    ), "dataset_type or mask_syle must be specified (except none)"
+    assert args.mlm_probability > 0 and args.mlm_probability < 1
+    if args.dataset_type != "" and args.mask_style != "none":
+        logger.warn(
+            f"mask_style {args.mask_style} has priority to dataset_type {args.dataset_type}"
+        )
     utils.assert_arguments_for_tokenizer(args)
 
     tokenizer: JapaneseTransformerTokenizer = utils.load_tokenizer(args)
@@ -381,8 +455,11 @@ if __name__ == "__main__":
         input_corpus=args.input_corpus,
         input_file=args.input_file,
         dataset_type=args.dataset_type,
+        mask_style=args.mask_style,
         tokenizer=tokenizer,
         max_length=args.max_length,
+        mlm_probability=args.mlm_probability,
+        do_save=True,
         dataset_dir=args.dataset_dir,
         cache_dir=args.cache_dir,
     )
