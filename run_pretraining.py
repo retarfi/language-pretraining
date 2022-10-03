@@ -1,32 +1,35 @@
 import argparse
 import datetime as dt
-from fractions import Fraction
 import json
+import logging
 import os
 import warnings
+from fractions import Fraction
+from typing import Dict, Union
 
 import datasets
 import torch
 import transformers
-from transformers.data.data_collator import DataCollatorMixin
+from transformers.models import auto
+from transformers.data.data_collator import DataCollatorMixin, DataCollatorWithPadding
 from transformers import (
-    BertConfig,
-    BertForPreTraining,
-    DebertaV2Config,
-    DebertaV2ForMaskedLM,
     ElectraConfig,
-    logging,
     PreTrainedModel,
     PreTrainedTokenizerBase,
-    RobertaConfig,
-    RobertaForMaskedLM,
     TrainingArguments,
 )
 
-logging.set_verbosity_info()
-logging.enable_explicit_format()
+transformers.logging.set_verbosity_warning()
+transformers.logging.enable_explicit_format()
 
 import utils
+from utils.logger import make_logger_setting
+
+
+# logger
+logger: logging.Logger = logging.getLogger(__name__)
+make_logger_setting(logger)
+
 
 TrainingArguments._setup_devices = utils._setup_devices
 
@@ -36,37 +39,63 @@ assert utils.TorchVersion(torch.__version__) >= utils.TorchVersion(
 ), f"This code requires a minimum version of PyTorch of 1.8.0, but the version found is {torch.__version__}"
 transformers.utils.check_min_version("4.10.2")
 
-logger = transformers.logging.get_logger()
 
-
-def get_model_bert(
+def get_model(
+    model_name: str,
     tokenizer: PreTrainedTokenizerBase,
     load_pretrained: bool,
     param_config: dict,
 ) -> PreTrainedModel:
-
-    if load_pretrained:
-        model = BertForPreTraining.from_pretrained(
-            param_config["pretrained_model_name_or_path"]
+    model: PreTrainedModel
+    if model_name == "electra":
+        model = get_model_electra(
+            tokenizer=tokenizer,
+            load_pretrained=load_pretrained,
+            param_config=param_config,
         )
-        flozen_layers = param_config["flozen-layers"]
-        if flozen_layers > -1:
-            for name, param in model.bert.embeddings.named_parameters():
-                param.requires_grad = False
-            for i in range(flozen_layers):
-                for name, param in model.bert.encoder.layer[i].named_parameters():
-                    param.requires_grad = False
     else:
-        bert_config = BertConfig(
-            pad_token_id=tokenizer.pad_token_id,
-            vocab_size=tokenizer.vocab_size,
-            hidden_size=param_config["hidden-size"],
-            num_hidden_layers=param_config["number-of-layers"],
-            num_attention_heads=param_config["attention-heads"],
-            intermediate_size=param_config["ffn-inner-hidden-size"],
-            max_position_embeddings=param_config["sequence-length"],
-        )
-        model = BertForPreTraining(config=bert_config)
+        if model_name == "debertav2":
+            model_name = "deberta-v2"
+        MappedConfig = auto.CONFIG_MAPPING[model_name]
+        MappedModel = auto.MODEL_FOR_PRETRAINING_MAPPING[MappedConfig]
+        if load_pretrained:
+            model = MappedModel.from_pretrained(
+                param_config["pretrained_model_name_or_path"]
+            )
+            flozen_layers = param_config["flozen-layers"]
+            if flozen_layers > -1:
+                for name, param in getattr(
+                    model, model_name.split("-")[0]
+                ).embeddings.named_parameters():
+                    param.requires_grad = False
+                for i in range(flozen_layers):
+                    for name, param in (
+                        getattr(model, model_name.split("-")[0])
+                        .encoder.layer[i]
+                        .named_parameters()
+                    ):
+                        param.requires_grad = False
+        else:
+            dct_kwargs: Dict[str, int] = {
+                "pad_token_id": tokenizer.pad_token_id,
+                "vocab_size": tokenizer.vocab_size,
+                "hidden_size": param_config["hidden-size"],
+                "num_hidden_layers": param_config["number-of-layers"],
+                "num_attention_heads": param_config["attention-heads"],
+                "intermediate_size": param_config["ffn-inner-hidden-size"],
+            }
+            if model_name in ["deberta-v2", "roberta"]:
+                dct_kwargs["bos_token_id"] = tokenizer.cls_token_id
+                dct_kwargs["eos_token_id"] = tokenizer.sep_token_id
+            if model_name == "roberta":
+                dct_kwargs["max_position_embeddings"] = (
+                    param_config["sequence-length"] + tokenizer.pad_token_id + 1
+                )
+            else:
+                # for bert, deberta, roberta
+                dct_kwargs["max_position_embeddings"] = param_config["sequence-length"]
+            config = MappedConfig(**dct_kwargs)
+            model = MappedModel(config=config)
     return model
 
 
@@ -120,74 +149,6 @@ def get_model_electra(
     return model
 
 
-def get_model_roberta(
-    tokenizer: PreTrainedTokenizerBase,
-    load_pretrained: bool,
-    param_config: dict,
-) -> PreTrainedModel:
-
-    if load_pretrained:
-        model = RobertaForMaskedLM.from_pretrained(
-            param_config["pretrained_model_name_or_path"]
-        )
-        flozen_layers = param_config["flozen-layers"]
-        if flozen_layers > -1:
-            for name, param in model.roberta.embeddings.named_parameters():
-                param.requires_grad = False
-            for i in range(flozen_layers):
-                for name, param in model.roberta.encoder.layer[i].named_parameters():
-                    param.requires_grad = False
-    else:
-        roberta_config = RobertaConfig(
-            pad_token_id=tokenizer.pad_token_id,
-            bos_token_id=tokenizer.cls_token_id,
-            eos_token_id=tokenizer.sep_token_id,
-            vocab_size=tokenizer.vocab_size,
-            hidden_size=param_config["hidden-size"],
-            num_hidden_layers=param_config["number-of-layers"],
-            num_attention_heads=param_config["attention-heads"],
-            intermediate_size=param_config["ffn-inner-hidden-size"],
-            max_position_embeddings=param_config["sequence-length"]
-            + tokenizer.pad_token_id
-            + 1,
-        )
-        model = RobertaForMaskedLM(config=roberta_config)
-    return model
-
-
-def get_model_deberta(
-    tokenizer: PreTrainedTokenizerBase,
-    load_pretrained: bool,
-    param_config: dict,
-) -> PreTrainedModel:
-
-    if load_pretrained:
-        model = DebertaV2ForMaskedLM.from_pretrained(
-            param_config["pretrained_model_name_or_path"]
-        )
-        flozen_layers = param_config["flozen-layers"]
-        if flozen_layers > -1:
-            for name, param in model.deberta.embeddings.named_parameters():
-                param.requires_grad = False
-            for i in range(flozen_layers):
-                for name, param in model.deberta.encoder.layer[i].named_parameters():
-                    param.requires_grad = False
-    else:
-        deberta_config = DebertaV2Config(
-            pad_token_id=tokenizer.pad_token_id,
-            bos_token_id=tokenizer.cls_token_id,
-            eos_token_id=tokenizer.sep_token_id,
-            vocab_size=tokenizer.vocab_size,
-            hidden_size=param_config["hidden-size"],
-            num_hidden_layers=param_config["number-of-layers"],
-            num_attention_heads=param_config["attention-heads"],
-            intermediate_size=param_config["ffn-inner-hidden-size"],
-            max_position_embeddings=param_config["sequence-length"],
-        )
-        model = DebertaV2ForMaskedLM(config=deberta_config)
-    return model
-
-
 def run_pretraining(
     tokenizer: PreTrainedTokenizerBase,
     dataset_dir: str,
@@ -195,15 +156,19 @@ def run_pretraining(
     model_dir: str,
     load_pretrained: bool,
     param_config: dict,
-    fp16_type: int,
-    do_whole_word_mask: bool,
-    do_continue: bool,
-    use_deepspeed: bool,
-    deepspeed_bucket_size: float,
-    node_rank: int,
-    local_rank: int,
-    run_name: str,
+    is_dataset_masked: bool,
+    do_continue: bool = False,
+    do_whole_word_mask: bool = False,
+    fp16_type: int = 0,
+    use_deepspeed: bool = False,
+    deepspeed_bucket_size: float = 5e-8,
+    node_rank: int = -1,
+    local_rank: int = -1,
+    run_name: str = "",
 ) -> None:
+    assert (
+        model_name != "bert" or not is_dataset_masked
+    ), "Pre-masking with bert is not available"
     if run_name == "":
         run_name = (
             dt.datetime.now().strftime("%y%m%d")
@@ -303,7 +268,7 @@ def run_pretraining(
         seed=42,  # default
         fp16=bool(fp16_type != 0),
         fp16_opt_level=f"O{fp16_type}",
-        #:"O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
+        # "O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm=True,
         max_steps=param_config["train-steps"],
         gradient_accumulation_steps=gradient_accumulation_steps,
@@ -324,27 +289,29 @@ def run_pretraining(
     logger.info("Dataset is loaded")
 
     # model
-    if model_name == "bert":
-        model = get_model_bert(tokenizer, load_pretrained, param_config)
-    elif model_name == "electra":
-        model = get_model_electra(tokenizer, load_pretrained, param_config)
-    elif model_name == "roberta":
-        model = get_model_roberta(tokenizer, load_pretrained, param_config)
-    elif model_name == "deberta":
-        model = get_model_deberta(tokenizer, load_pretrained, param_config)
+    model: PreTrainedModel = get_model(
+        model_name=model_name,
+        tokenizer=tokenizer,
+        load_pretrained=load_pretrained,
+        param_config=param_config,
+    )
     logger.info(f"{model_name} model is loaded")
 
     # data collator
-    if model_name in ["bert", "roberta", "deberta"]:
+    if model_name in ["bert", "roberta", "debertav2"]:
         mlm_probability = 0.15
     elif model_name == "electra":
         mlm_probability = param_config["mask-percent"] / 100
-    data_collator: DataCollatorMixin = utils.get_mask_datacollator(
-        model_name=model_name,
-        do_whole_word_mask=do_whole_word_mask,
-        tokenizer=tokenizer,
-        mlm_probability=mlm_probability
-    )
+    data_collator: Union[DataCollatorMixin, DataCollatorWithPadding]
+    if is_dataset_masked:
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    else:
+        data_collator = utils.get_mask_datacollator(
+            model_name=model_name,
+            do_whole_word_mask=do_whole_word_mask,
+            tokenizer=tokenizer,
+            mlm_probability=mlm_probability,
+        )
     logger.info("Datacollator was complete.")
     trainer = utils.MyTrainer(
         model=model,
@@ -367,7 +334,7 @@ def run_pretraining(
 def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
     """
     Return
-    model_name: str, bert, deberta, electra, or roberta
+    model_name: str, bert, debertav2, electra, or roberta
     load_pretrained: bool, True when further pretrain and False when pretrain from scratch
     """
     if model_type not in param_config:
@@ -376,8 +343,8 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
         model_name = "electra"
     elif "roberta-" in model_type.lower():
         model_name = "roberta"
-    elif "deberta-" in model_type.lower():
-        model_name = "deberta"
+    elif "debertav2-" in model_type.lower():
+        model_name = "debertav2"
     elif "bert-" in model_type.lower():
         model_name = "bert"
     else:
@@ -385,7 +352,7 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
     param_config = param_config[model_type]
     if (
         len(
-            param_config.keys()
+            set(param_config.keys())
             & {
                 f"pretrained_{x}model_name_or_path"
                 for x in ["", "generator_", "discriminator"]
@@ -395,7 +362,7 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
     ):
         load_pretrained = True
         set_assert = {"flozen-layers"}
-        if model_name in ["bert", "roberta", "deberta"]:
+        if model_name in ["bert", "roberta", "debertav2"]:
             set_assert = set_assert | {"pretrained_model_name_or_path"}
         if model_name == "electra":
             set_assert = set_assert | {
@@ -453,22 +420,29 @@ if __name__ == "__main__":
         "--model_type",
         type=str,
         required=True,
-        help="model parameter defined in the parameter_file. It must contain 'bert-', 'deberta-', 'electra-', or 'roberta-'",
+        help="model parameter defined in the parameter_file. It must contain 'bert-', 'debertav2-', 'electra-', or 'roberta-'",
     )
     # optional
+    parser.add_argument("--run_name", type=str, default="")
+    parser.add_argument("--do_whole_word_mask", action="store_true")
+    parser.add_argument("--do_continue", action="store_true")
+    parser.add_argument(
+        "--is_dataset_masked",
+        action="store_true",
+        help="use this option when masking process is already completed",
+    )
+    parser.add_argument("--use_deepspeed", action="store_true")
+    parser.add_argument("--deepspeed_bucket_size", type=float, default=5e8)
     parser.add_argument(
         "--fp16_type",
         type=int,
         default=0,
         choices=[0, 1, 2, 3],
-        help="default:0(disable), see https://nvidia.github.io/apex/amp.html for detail",
+        help=(
+            "default:0(disable), see https://nvidia.github.io/apex/amp.html for detail."
+            "This is ignored when deepspeed is applied"
+        ),
     )
-
-    parser.add_argument("--run_name", type=str, default="")
-    parser.add_argument("--do_whole_word_mask", action="store_true")
-    parser.add_argument("--do_continue", action="store_true")
-    parser.add_argument("--use_deepspeed", action="store_true")
-    parser.add_argument("--deepspeed_bucket_size", type=float, default=5e8)
     parser.add_argument("--node_rank", type=int, default=-1)
     parser.add_argument("--local_rank", type=int, default=-1)
     utils.add_arguments_for_tokenizer(parser)
@@ -500,6 +474,7 @@ if __name__ == "__main__":
         fp16_type=args.fp16_type,
         do_whole_word_mask=args.do_whole_word_mask,
         do_continue=args.do_continue,
+        is_dataset_masked=args.is_dataset_masked,
         use_deepspeed=args.use_deepspeed,
         deepspeed_bucket_size=args.deepspeed_bucket_size,
         node_rank=args.node_rank,
