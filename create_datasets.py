@@ -36,7 +36,7 @@ def make_dataset(
     max_length: int,
     do_save: bool = True,
     mlm_probability: float = 0.15,
-    dataset_dir: str = "./datasets",
+    dataset_dir: str = "./dataset",
     cache_dir: str = "./.cache/datasets",
 ) -> Union[
     torch.utils.data.dataset.Dataset,
@@ -45,6 +45,19 @@ def make_dataset(
     datasets.dataset_dict.IterableDatasetDict,
     datasets.iterable_dataset.IterableDataset,
 ]:
+    # assertions
+    assert (
+        input_corpus in ["wiki-en", "openwebtext"] or input_file != ""
+    ), "input_file must be specified with japanese corpus"
+    assert (
+        dataset_type != "" or mask_style != "none"
+    ), "dataset_type or mask_syle must be specified (except none)"
+    assert mask_style.split("-")[0] != "bert", "Pre-masking for bert is not available in run_pretraining.py"
+    assert mlm_probability > 0 and mlm_probability < 1
+    if dataset_type != "" and mask_style != "none":
+        logger.warn(
+            f"mask_style {mask_style} has priority to dataset_type {dataset_type}"
+        )
 
     # make sentences
     documents: List[List[str]] = [[]]
@@ -159,7 +172,11 @@ def make_dataset(
         # data_collator: List[Dict[str, Union[List[int], int]]] -> BatchEncoding[str, torch.tensor(size: (1) or(1, max_length))]
         # _convert_batchencoding_to_dict: BatchEncoding -> Dict[str, Union[List[int], int]]:
         ds = ds.map(
-            lambda example: _convert_batchencoding_to_dict(data_collator([example.data]))
+            lambda example: _convert_batchencoding_to_dict(
+                data_collator(
+                    [(example if isinstance(example, dict) else example.data)]
+                )
+            )
         )
 
     # save processed data
@@ -168,7 +185,7 @@ def make_dataset(
             dataset_dir, f"{dataset_type}_{max_length}_{input_corpus}"
         )
         if mask_style != "none":
-            processed_dataset_path += mask_style
+            processed_dataset_path += f"_{mask_style}"
         ds.flatten_indices().save_to_disk(processed_dataset_path)
         logger.info(f"Processed dataset saved in {processed_dataset_path}")
     return ds
@@ -400,13 +417,13 @@ if __name__ == "__main__":
         default="",
         choices=["linebyline", "nsp", ""],
         help=(
-            "This must be specified when --mask_style is none."
+            "This must be specified when --mask_style is none. "
             "Overwritten when --mask_sytle is other than none"
         ),
     )
     parser.add_argument("--input_file", type=str, default="")
     lst_mask_style: List[str] = ["none"] + list(
-        itertools.product(["bert", "debertav2", "electra", "roberta"], ["", "-wwm"])
+        itertools.product(["debertav2", "electra", "roberta"], ["", "-wwm"])
     )
     parser.add_argument(
         "--mask_style",
@@ -414,33 +431,23 @@ if __name__ == "__main__":
         default="none",
         choices=lst_mask_style,
         help=(
-            "If none (default), no masking."
-            "If other choice, masking is applied."
-            "'-wwm' means applying whole-word-masking."
+            "If none (default), no masking. "
+            "If other choice, masking is applied. "
+            "'-wwm' means applying whole-word-masking. "
+            "Masking for bert is not available (only dynamic masking is avialable)"
         ),
     )
     parser.add_argument("--mlm_probability", type=float, default=0.15)
     parser.add_argument(
         "--dataset_dir",
         type=str,
-        default="./datasets/",
+        default="./dataset/",
         help="Directory which saves each dataset",
     )
     parser.add_argument("--cache_dir", type=str, default="./.cache/datasets/")
     utils.add_arguments_for_tokenizer(parser)
 
     args: argparse.Namespace = parser.parse_args()
-    assert (
-        args.input_corpus in ["wiki-en", "openwebtext"] or args.input_file != ""
-    ), "input_file must be specified with japanese corpus"
-    assert (
-        args.dataset_type != "" or args.mask_style != "none"
-    ), "dataset_type or mask_syle must be specified (except none)"
-    assert args.mlm_probability > 0 and args.mlm_probability < 1
-    if args.dataset_type != "" and args.mask_style != "none":
-        logger.warn(
-            f"mask_style {args.mask_style} has priority to dataset_type {args.dataset_type}"
-        )
     utils.assert_arguments_for_tokenizer(args)
 
     tokenizer: JapaneseTransformerTokenizer = utils.load_tokenizer(args)
