@@ -161,7 +161,7 @@ def run_pretraining(
     do_whole_word_mask: bool = False,
     fp16_type: int = 0,
     use_deepspeed: bool = False,
-    deepspeed_bucket_size: float = 5e-8,
+    deepspeed_bucket_size: float = 5e8,
     node_rank: int = -1,
     local_rank: int = -1,
     run_name: str = "",
@@ -204,7 +204,6 @@ def run_pretraining(
                 "enabled": "auto",
                 "loss_scale": 0,
                 "loss_scale_window": 1000,
-                "initial_scale_power": 16,
                 "hysteresis": 2,
                 "min_loss_scale": 1,
             },
@@ -239,8 +238,9 @@ def run_pretraining(
             "gradient_accumulation_steps": "auto",
             "gradient_clipping": "auto",
             "steps_per_print": logging_steps * gradient_accumulation_steps,
-            "train_batch_size": sum(param_config["batch-size"].values())
-            * gradient_accumulation_steps,
+            # "train_batch_size": sum(param_config["batch-size"].values())
+            # * gradient_accumulation_steps,
+            "train_batch_size": "auto",
             "train_micro_batch_size_per_gpu": per_device_train_batch_size,
             "wall_clock_breakdown": False,
         }
