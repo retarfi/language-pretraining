@@ -68,13 +68,14 @@ def mp_tokenize(
     output_txt: str,
     num_file: int,
     word_tokenizer_type: str,
-    mecab_dic_type: str,
-    mecab_option: str,
-    sudachi_split_mode: Optional[str],
-    sudachi_config_path: Optional[str],
-    sudachi_resource_dir: Optional[str],
-    sudachi_dict_type: Optional[str],
-    use_tqdm: bool
+    mecab_dic_type: str = "",
+    mecab_option: str = "",
+    sudachi_split_mode: Optional[str] = None,
+    sudachi_config_path: Optional[str] = None,
+    sudachi_resource_dir: Optional[str] = None,
+    sudachi_dict_type: Optional[str] = None,
+    use_tqdm: bool = True,
+    ignore_max_byte_error: bool = False
 ) -> None:
 
     main_tokenizer = get_word_tokenizer(
@@ -86,15 +87,15 @@ def mp_tokenize(
         sudachi_config_path=sudachi_config_path,
         sudachi_resource_dir=sudachi_resource_dir,
         sudachi_dict_type=sudachi_dict_type,
+        ignore_max_byte_error=ignore_max_byte_error
     )
-    if num_file == 0:
+    if num_file == 0 and use_tqdm:
         line_all = int(
             subprocess.run(
                 ["wc", "-l", input_txt], encoding="utf-8", stdout=subprocess.PIPE
             ).stdout.split()[0]
         )
-        if use_tqdm:
-            pbar: tqdm = tqdm(total=line_all, bar_format=BAR_FORMAT)
+        pbar: tqdm = tqdm(total=line_all, bar_format=BAR_FORMAT)
     with open(input_txt, "r") as infile, open(output_txt, "w") as outfile:
         for line in infile:
             if line == "\n":
@@ -120,7 +121,8 @@ def pre_tokenize(
     sudachi_config_path: str,
     sudachi_resource_dir: str,
     sudachi_dict_type: str,
-    use_tqdm: bool = True
+    use_tqdm: bool = True,
+    ignore_max_byte_error: bool = False
 ) -> str:
     logger.info("Pre-tokenizing...")
     input_file_or_dir: str
@@ -140,7 +142,8 @@ def pre_tokenize(
             sudachi_config_path=sudachi_config_path,
             sudachi_resource_dir=sudachi_resource_dir,
             sudachi_dict_type=sudachi_dict_type,
-            use_tqdm=use_tqdm
+            use_tqdm=use_tqdm,
+            ignore_max_byte_error=ignore_max_byte_error
         )
         logger.info(f"Pre-tokenized files are saved in {str(pretokenized_plib_file)}")
         input_file_or_dir = str(pretokenized_plib_file)
@@ -165,7 +168,8 @@ def pre_tokenize(
                         sudachi_config_path,
                         sudachi_resource_dir,
                         sudachi_dict_type,
-                        use_tqdm
+                        use_tqdm,
+                        ignore_max_byte_error
                     ),
                 )
                 for i in range(num_files)
@@ -213,7 +217,8 @@ def train_tokenizer(
             unk_piece="[UNK]",
             bos_piece="[CLS]",
             eos_piece="[SEP]",
-            pad_piece="[PAD]",
+            # pad_piece="[PAD]",
+            control_symbols=["[PAD]", "[MASK]"],
             user_defined_symbols=",".join(special_tokens),
         )
     elif tokenizer_type == "wordpiece":
@@ -262,7 +267,6 @@ if __name__ == "__main__":
     parser.add_argument("--num_files", type=int, default=1)
     # pre-tokenize(mainword) option
     parser.add_argument("--pretokenized_prefix", type=str, default="_pretokenized")
-    parser.add_argument("--disable_normalize_text", action="store_false")
     # subword training option
     parser.add_argument(
         "--tokenizer_type",
@@ -290,7 +294,8 @@ if __name__ == "__main__":
     parser.add_argument("--sudachi_resource_dir")
     parser.add_argument("--sudachi_dict_type")
     # other option
-    parser.add_argument("--disable_tqdm", action="store_false")
+    parser.add_argument("--disable_tqdm", action="store_true")
+    parser.add_argument("--ignore_max_byte_error", action="store_true")
     args = parser.parse_args()
 
     # assertion
@@ -332,7 +337,8 @@ if __name__ == "__main__":
             sudachi_config_path=args.sudachi_config_path,
             sudachi_resource_dir=args.sudachi_resource_dir,
             sudachi_dict_type=args.sudachi_dict_type,
-            use_tqdm=use_tqdm
+            use_tqdm=use_tqdm,
+            ignore_max_byte_error=args.ignore_max_byte_error
         )
     else:
         input_file_or_dir = args.input_file

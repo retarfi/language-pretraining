@@ -24,7 +24,7 @@ def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
         subword_tokenizer_type: Optional[str],
         tokenizer_class: Optional[str],
         do_lower_case: bool,
-        do_word_tokenize: bool,
+        ignore_max_byte_error: bool,
         mecab_dic: Optional[str],
         mecab_option: Optional[str],
         sudachi_split_mode: Optional[str],
@@ -45,7 +45,7 @@ def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
                     word_tokenizer_type=word_tokenizer_type,
                     tokenizer_class=tokenizer_class,
                     do_lower_case=do_lower_case,
-                    do_word_tokenize=do_word_tokenize,
+                    ignore_max_byte_error=ignore_max_byte_error,
                     mecab_dic=mecab_dic,
                     mecab_option=mecab_option,
                     sudachi_split_mode=sudachi_split_mode,
@@ -60,7 +60,7 @@ def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
                     word_tokenizer_type=word_tokenizer_type,
                     subword_tokenizer_type=subword_tokenizer_type,
                     do_lower_case=do_lower_case,
-                    do_word_tokenize=do_word_tokenize,
+                    ignore_max_byte_error=ignore_max_byte_error,
                     unk_token=unk_token,
                     sep_token=sep_token,
                     pad_token=pad_token,
@@ -87,12 +87,11 @@ def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
         language=args.language,
         tokenizer_name_or_path=args.tokenizer_name_or_path,
         load_from_hub=args.load_from_hub,
-        word_tokenizer=args.word_tokenizer,
-        subword_tokenizer=args.subword_tokenizer,
+        word_tokenizer_type=args.word_tokenizer_type,
+        subword_tokenizer_type=args.subword_tokenizer_type,
         tokenizer_class=args.tokenizer_class,
         do_lower_case=args.do_lower_case,
-        do_word_tokenize=args.do_word_tokenize,
-        never_split=args.never_split,
+        ignore_max_byte_error=args.ignore_max_byte_error,
         mecab_dic=args.mecab_dic,
         mecab_option=args.mecab_option,
         sudachi_split_mode=args.sudachi_split_mode,
@@ -126,8 +125,7 @@ def add_arguments_for_tokenizer(parser: argparse.Namespace) -> None:
     )
     parser.add_argument("--tokenizer_class")
     parser.add_argument("--do_lower_case", action="store_true")
-    parser.add_argument("--do_word_tokenize", action="store_true")
-    parser.add_argument("--never_split", nargs="*")
+    parser.add_argument("--ignore_max_byte_error", action="store_true")
     parser.add_argument("--mecab_dic")
     parser.add_argument("--mecab_option")
     parser.add_argument("--sudachi_split_mode")
@@ -148,14 +146,10 @@ def assert_arguments_for_tokenizer(args: argparse.Namespace) -> None:
         args.tokenizer_name_or_path != ""
     ), "Argument tokenizer_name_or_path must be specified"
     if args.language == "ja":
-        assert (
-            args.word_tokenizer_type is not None
-        ), "Argument word_tokenizer must be explicitly specified (basic, mecab, juman, spacy-luw, sudachi, none)"
-        if args.load_from_hub:
+        if not args.load_from_hub:
             assert (
-                args.tokenizer_class is not None
-            ), "Argument tokenizer_class must be specified"
-        else:
+                args.word_tokenizer_type is not None
+            ), "Argument word_tokenizer must be explicitly specified (basic, mecab, juman, spacy-luw, sudachi, none)"
             assert (
                 args.subword_tokenizer_type is not None
             ), "Argument subword_tokenizer must be specified (wordpiece, sentencepiece)"
