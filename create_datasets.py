@@ -23,7 +23,6 @@ logger: logging.Logger = logging.getLogger(__name__)
 make_logger_setting(logger)
 
 # global variables
-datasets.config.IN_MEMORY_MAX_SIZE = 250 * 10**9
 NSP_PROBABILITY: int = 0.5
 
 
@@ -52,7 +51,9 @@ def make_dataset(
     assert (
         dataset_type != "" or mask_style != "none"
     ), "dataset_type or mask_syle must be specified (except none)"
-    assert mask_style.split("-")[0] != "bert", "Pre-masking for bert is not available in run_pretraining.py"
+    assert (
+        mask_style.split("-")[0] != "bert"
+    ), "Pre-masking for bert is not available in run_pretraining.py"
     assert mlm_probability > 0 and mlm_probability < 1
     if dataset_type != "" and mask_style != "none":
         logger.warn(
@@ -104,12 +105,10 @@ def make_dataset(
     del documents
 
     # tokenize
-    # num_proc = 3
     ds = ds.map(
-        lambda example: _sentence_to_ids(example, tokenizer, batched=True),
+        lambda example: _sentence_to_ids(example, tokenizer, batched=False),
         remove_columns=["sentence"],
-        # num_proc=num_proc,
-        batched=True,
+        batched=False,
         load_from_cache_file=False,
     ).flatten_indices()
     ds = ds.filter(
@@ -208,8 +207,17 @@ def _sentence_to_ids(
             if batch
         ]
     else:
-        tokens = [tokenizer.tokenize(line) for line in example["sentence"]]
-        tokens = [tokenizer.convert_tokens_to_ids(tk) for tk in tokens if tk]
+        if tokenizer.word_tokenizer_type == "juman":
+            p = re.compile("[a-zA-Z]+")
+            tokens = [
+                tokenizer.tokenize(line)
+                for line in example["sentence"]
+                if len(line.encode("utf-8")) <= 4096
+                and len("".join(p.findall(line))) / len(line) < 0.85
+            ]
+        else:
+            tokens = [tokenizer.tokenize(line) for line in example["sentence"]]
+            tokens = [tokenizer.convert_tokens_to_ids(tk) for tk in tokens if tk]
     return {"tokens": tokens}
 
 
@@ -404,7 +412,7 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help=(
-            "Directory name for created dataset."
+            "Directory name for created dataset. "
             "Other affixes are also added to this."
         ),
     )
@@ -423,7 +431,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--input_file", type=str, default="")
     lst_mask_style: List[str] = ["none"] + list(
-        itertools.product(["debertav2", "electra", "roberta"], ["", "-wwm"])
+        map(
+            lambda x: "".join(x),
+            itertools.product(["debertav2", "electra", "roberta"], ["", "-wwm"]),
+        )
     )
     parser.add_argument(
         "--mask_style",
@@ -433,11 +444,16 @@ if __name__ == "__main__":
         help=(
             "If none (default), no masking. "
             "If other choice, masking is applied. "
-            "'-wwm' means applying whole-word-masking. "
+            "-wwm means applying whole-word-masking. "
             "Masking for bert is not available (only dynamic masking is avialable)"
         ),
     )
-    parser.add_argument("--mlm_probability", type=float, default=0.15)
+    parser.add_argument(
+        "--mlm_probability",
+        type=float,
+        default=0.15,
+        help="Probability of target for masking",
+    )
     parser.add_argument(
         "--dataset_dir",
         type=str,
