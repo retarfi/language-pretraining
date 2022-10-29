@@ -5,13 +5,13 @@ import logging
 import os
 import random
 import re
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import datasets
 import torch
 from datasets import Dataset
 from jptranstokenizer import JapaneseTransformerTokenizer
-from transformers import BatchEncoding
+from transformers import BatchEncoding, PreTrainedTokenizerBase
 
 import utils
 from utils.data_collator import get_mask_datacollator
@@ -56,7 +56,7 @@ def make_dataset(
     ), "Pre-masking for bert is not available in run_pretraining.py"
     assert mlm_probability > 0 and mlm_probability < 1
     if dataset_type != "" and mask_style != "none":
-        logger.warn(
+        logger.warning(
             f"mask_style {mask_style} has priority to dataset_type {dataset_type}"
         )
 
@@ -172,9 +172,11 @@ def make_dataset(
         # _convert_batchencoding_to_dict: BatchEncoding -> Dict[str, Union[List[int], int]]:
         ds = ds.map(
             lambda example: _convert_batchencoding_to_dict(
-                data_collator(
+                batch=data_collator(
                     [(example if isinstance(example, dict) else example.data)]
-                )
+                ),
+                tokenizer=tokenizer,
+                max_length=max_length
             )
         )
 
@@ -395,9 +397,14 @@ def _create_examples_from_document_for_nsp(
 
 
 def _convert_batchencoding_to_dict(
-    batch: BatchEncoding,
+    batch: BatchEncoding, tokenizer: PreTrainedTokenizerBase, max_length: int
 ) -> Dict[str, Union[List[int], int]]:
+    # pad input_ids, attention_mask (, and token_type_ids if exists)
     dct: Dict[str, Union[List[int], int]] = {k: v.tolist()[0] for k, v in batch.items()}
+    dct = tokenizer.pad(dct, padding="max_length", max_length=max_length).data
+    ignore_index: int = -100
+    # pad labels
+    dct["labels"] += [ignore_index] * max(0, max_length - len(dct["labels"]))
     return dct
 
 
