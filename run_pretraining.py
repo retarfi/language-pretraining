@@ -8,6 +8,7 @@ from fractions import Fraction
 from typing import Dict, Union
 
 import datasets
+import psutil
 import torch
 import transformers
 from transformers.models import auto
@@ -159,6 +160,7 @@ def run_pretraining(
     is_dataset_masked: bool,
     do_continue: bool = False,
     do_whole_word_mask: bool = False,
+    bf16: bool = False,
     fp16_type: int = 0,
     use_deepspeed: bool = False,
     deepspeed_bucket_size: float = 5e8,
@@ -200,13 +202,6 @@ def run_pretraining(
     )
     if use_deepspeed:
         deepspeed = {
-            "fp16": {
-                "enabled": "auto",
-                "loss_scale": 0,
-                "loss_scale_window": 1000,
-                "hysteresis": 2,
-                "min_loss_scale": 1,
-            },
             "optimizer": {
                 "type": "AdamW",
                 "params": {
@@ -244,6 +239,16 @@ def run_pretraining(
             "train_micro_batch_size_per_gpu": per_device_train_batch_size,
             "wall_clock_breakdown": False,
         }
+        if bool(fp16_type):
+            deepspeed["fp16"] = {
+                "enabled": "auto",
+                "loss_scale": 0,
+                "loss_scale_window": 1000,
+                "hysteresis": 2,
+                "min_loss_scale": 1,
+            }
+        if bf16:
+            deepspeed["bf16"] = {"enabled": True}
     else:
         deepspeed = None
     # initialize
@@ -254,7 +259,7 @@ def run_pretraining(
         per_device_train_batch_size=per_device_train_batch_size,
         learning_rate=param_config["learning-rate"],
         adam_beta1=0.9,  # same as BERT paper
-        adam_beta2=0.999,  # same as BERT paper
+        adam_beta2=0.98 if model_name == "roberta" else 0.999,  # same as BERT paper
         adam_epsilon=1e-6,
         weight_decay=0.01,  # same as BERT paper
         warmup_steps=param_config["warmup-steps"],
@@ -266,9 +271,11 @@ def run_pretraining(
         logging_steps=logging_steps,
         save_total_limit=20,  # optional
         seed=42,  # default
+        bf16=bf16,
         fp16=bool(fp16_type != 0),
         fp16_opt_level=f"O{fp16_type}",
-        # "O1":Mixed Precision (recommended for typical use), "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
+        # "O1":Mixed Precision (recommended for typical use),
+        # "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm=True,
         max_steps=param_config["train-steps"],
         gradient_accumulation_steps=gradient_accumulation_steps,
@@ -304,7 +311,11 @@ def run_pretraining(
         mlm_probability = param_config["mask-percent"] / 100
     data_collator: Union[DataCollatorMixin, DataCollatorWithPadding]
     if is_dataset_masked:
-        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+        data_collator = DataCollatorWithPadding(
+            tokenizer=tokenizer,
+            padding="max_length",
+            max_length=param_config["sequence-length"],
+        )
     else:
         data_collator = utils.get_mask_datacollator(
             model_name=model_name,
@@ -433,6 +444,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use_deepspeed", action="store_true")
     parser.add_argument("--deepspeed_bucket_size", type=float, default=5e8)
+    parser.add_argument("--bf16", action="store_true")
     parser.add_argument(
         "--fp16_type",
         type=int,
@@ -440,7 +452,7 @@ if __name__ == "__main__":
         choices=[0, 1, 2, 3],
         help=(
             "default:0(disable), see https://nvidia.github.io/apex/amp.html for detail."
-            "This is ignored when deepspeed is applied"
+            "This is ignored when deepspeed is applied (only enables fp16)"
         ),
     )
     parser.add_argument("--node_rank", type=int, default=-1)
@@ -448,12 +460,15 @@ if __name__ == "__main__":
     utils.add_arguments_for_tokenizer(parser)
     args = parser.parse_args()
     assert not (
-        args.subword_tokenizer == "sentencepiece" and args.do_whole_word_mask
+        args.subword_tokenizer_type == "sentencepiece" and args.do_whole_word_mask
     ), "Whole Word Masking cannot be applied with sentencepiece tokenizer"
     utils.assert_arguments_for_tokenizer(args)
 
     # global variables
-    datasets.config.IN_MEMORY_MAX_SIZE = 50 * 10**9
+    ram_gb: float = psutil.virtual_memory().total / 1073741824
+    # dev_count: int = max(torch.cuda.device_count(), 1)
+    # datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9 / dev_count) * 10**9
+    datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9) * 10**9
 
     # parameter configuration
     with open(args.parameter_file, "r") as f:
@@ -471,6 +486,7 @@ if __name__ == "__main__":
         model_dir=args.model_dir,
         load_pretrained=load_pretrained,
         param_config=param_config[args.model_type],
+        bf16=args.bf16,
         fp16_type=args.fp16_type,
         do_whole_word_mask=args.do_whole_word_mask,
         do_continue=args.do_continue,
