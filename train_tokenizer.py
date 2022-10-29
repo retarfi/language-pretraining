@@ -75,8 +75,10 @@ def mp_tokenize(
     sudachi_resource_dir: Optional[str] = None,
     sudachi_dict_type: Optional[str] = None,
     use_tqdm: bool = True,
-    ignore_max_byte_error: bool = False
+    ignore_max_byte_error: bool = False,
+    ignore_runtime_error: bool = False,
 ) -> None:
+    # ignore_runtime_error is option for spacy-luw
 
     main_tokenizer = get_word_tokenizer(
         word_tokenizer_type=word_tokenizer_type,
@@ -101,8 +103,13 @@ def mp_tokenize(
             if line == "\n":
                 outfile.write("\n")
             else:
-                # outfile.write(tagger.parse(line.strip()) + '\n')
-                outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + "\n")
+                if ignore_runtime_error:
+                    try:
+                        outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + "\n")
+                    except RuntimeError:
+                        pass
+                else:
+                    outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + "\n")
             if num_file == 0 and use_tqdm:
                 pbar.update(1)
     if num_file == 0 and use_tqdm:
