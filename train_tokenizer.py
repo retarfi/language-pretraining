@@ -215,17 +215,22 @@ def train_tokenizer(
 
         spm.SentencePieceTrainer.Train(
             input=files,
+            model_type="word",
             # model_dir=output_dir,
             vocab_size=vocab_size,
             model_prefix=os.path.join(output_dir, "spiece"),
             character_coverage=0.9995,
             num_threads=os.cpu_count(),
             train_extremely_large_corpus=True,
+            pad_piece="[PAD]",
             unk_piece="[UNK]",
             bos_piece="[CLS]",
             eos_piece="[SEP]",
-            # pad_piece="[PAD]",
-            control_symbols=["[PAD]", "[MASK]"],
+            pad_id=0,
+            unk_id=1,
+            bos_id=2,
+            eos_id=3,
+            control_symbols=["[MASK]"],
             user_defined_symbols=",".join(special_tokens),
         )
     elif tokenizer_type == "wordpiece":
@@ -239,7 +244,7 @@ def train_tokenizer(
                 strip_accents=None,  # determined by the value for lowercase
                 lowercase=True,
             )
-        special_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+        special_tokens = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
         special_tokens += [
             "<unused{}>".format(i) for i in range(num_unused_tokens)
         ]
