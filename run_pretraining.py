@@ -160,8 +160,6 @@ def run_pretraining(
     is_dataset_masked: bool,
     do_continue: bool = False,
     do_whole_word_mask: bool = False,
-    bf16: bool = False,
-    fp16_type: int = 0,
     use_deepspeed: bool = False,
     deepspeed_bucket_size: float = 5e8,
     node_rank: int = -1,
@@ -218,6 +216,7 @@ def run_pretraining(
                     "warmup_max_lr": "auto",
                     "warmup_num_steps": "auto",
                     "total_num_steps": "auto",
+                    "warmup_type": "linear"
                 },
             },
             "zero_optimization": {
@@ -232,14 +231,14 @@ def run_pretraining(
             },
             "gradient_accumulation_steps": "auto",
             "gradient_clipping": "auto",
-            "steps_per_print": logging_steps * gradient_accumulation_steps,
+            "steps_per_print": 999999999999, #logging_steps * gradient_accumulation_steps,
             # "train_batch_size": sum(param_config["batch-size"].values())
             # * gradient_accumulation_steps,
             "train_batch_size": "auto",
             "train_micro_batch_size_per_gpu": per_device_train_batch_size,
             "wall_clock_breakdown": False,
         }
-        if bool(fp16_type):
+        if bool(param_config["fp16-type"]):
             deepspeed["fp16"] = {
                 "enabled": "auto",
                 "loss_scale": 0,
@@ -247,7 +246,7 @@ def run_pretraining(
                 "hysteresis": 2,
                 "min_loss_scale": 1,
             }
-        if bf16:
+        if param_config["bf16"]:
             deepspeed["bf16"] = {"enabled": True}
     else:
         deepspeed = None
@@ -271,9 +270,9 @@ def run_pretraining(
         logging_steps=logging_steps,
         save_total_limit=20,  # optional
         seed=42,  # default
-        bf16=bf16,
-        fp16=bool(fp16_type != 0),
-        fp16_opt_level=f"O{fp16_type}",
+        bf16=param_config["bf16"],
+        fp16=bool(param_config["fp16-type"] != 0),
+        fp16_opt_level="O{}".format(param_config["fp16-type"]),
         # "O1":Mixed Precision (recommended for typical use),
         # "O2":“Almost FP16” Mixed Precision, "O3":FP16 training
         disable_tqdm=True,
@@ -281,6 +280,7 @@ def run_pretraining(
         gradient_accumulation_steps=gradient_accumulation_steps,
         dataloader_num_workers=3,
         dataloader_pin_memory=False,
+        dataloader_drop_last=True,
         local_rank=local_rank,
         report_to="tensorboard",
         deepspeed=deepspeed,
@@ -342,14 +342,12 @@ def run_pretraining(
     )
 
 
-def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
+def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
     """
     Return
     model_name: str, bert, debertav2, electra, or roberta
     load_pretrained: bool, True when further pretrain and False when pretrain from scratch
     """
-    if model_type not in param_config:
-        raise KeyError(f"{model_type} not in parameters.json")
     if "electra-" in model_type.lower():
         model_name = "electra"
     elif "roberta-" in model_type.lower():
@@ -360,7 +358,6 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
         model_name = "bert"
     else:
         raise ValueError("Argument model_type must contain electra or bert")
-    param_config = param_config[model_type]
     if (
         len(
             set(param_config.keys())
@@ -392,6 +389,8 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
             "learning-rate",
             "batch-size",
             "train-steps",
+            "fp16-type",
+            "bf16"
         }
         if model_name == "electra":
             set_assert = set_assert | {
@@ -403,9 +402,9 @@ def assert_config(param_config: dict, model_type: str, local_rank: int) -> bool:
         raise ValueError(
             f"{set_assert-param_config.keys()} is(are) not in parameter_file"
         )
-    if str(local_rank) not in param_config["batch-size"].keys():
+    if str(node_rank) not in param_config["batch-size"].keys():
         raise ValueError(
-            f"local_rank {local_rank} is not defined in batch-size of parameter_file"
+            f"node_rank {node_rank} is not defined in batch-size of parameter_file"
         )
     logger.info(f"Config[{model_type}] is loaded")
     return model_name, load_pretrained
@@ -420,7 +419,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_dir", type=str, required=True, help="directory of corpus dataset"
     )
-    parser.add_argument("--model_dir", type=str, required=True)
+    parser.add_argument("--model_dir", type=str, required=True, help="directory to save pretrained model")
     parser.add_argument(
         "--parameter_file",
         type=str,
@@ -444,17 +443,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use_deepspeed", action="store_true")
     parser.add_argument("--deepspeed_bucket_size", type=float, default=5e8)
-    parser.add_argument("--bf16", action="store_true")
-    parser.add_argument(
-        "--fp16_type",
-        type=int,
-        default=0,
-        choices=[0, 1, 2, 3],
-        help=(
-            "default:0(disable), see https://nvidia.github.io/apex/amp.html for detail."
-            "This is ignored when deepspeed is applied (only enables fp16)"
-        ),
-    )
     parser.add_argument("--node_rank", type=int, default=-1)
     parser.add_argument("--local_rank", type=int, default=-1)
     utils.add_arguments_for_tokenizer(parser)
@@ -473,8 +461,10 @@ if __name__ == "__main__":
     # parameter configuration
     with open(args.parameter_file, "r") as f:
         param_config = json.load(f)
+    if args.model_type not in param_config:
+        raise KeyError(f"{args.model_type} not in parameters.json")
     model_name, load_pretrained = assert_config(
-        param_config, args.model_type, args.local_rank
+        param_config[args.model_type], args.model_type, args.node_rank
     )
 
     tokenizer = utils.load_tokenizer(args)
@@ -486,8 +476,6 @@ if __name__ == "__main__":
         model_dir=args.model_dir,
         load_pretrained=load_pretrained,
         param_config=param_config[args.model_type],
-        bf16=args.bf16,
-        fp16_type=args.fp16_type,
         do_whole_word_mask=args.do_whole_word_mask,
         do_continue=args.do_continue,
         is_dataset_masked=args.is_dataset_masked,
