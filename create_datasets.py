@@ -219,7 +219,7 @@ def _sentence_to_ids(
             ]
         else:
             tokens = [tokenizer.tokenize(line) for line in example["sentence"]]
-            tokens = [tokenizer.convert_tokens_to_ids(tk) for tk in tokens if tk]
+        tokens = [tokenizer.convert_tokens_to_ids(tk) for tk in tokens if tk]
     return {"tokens": tokens}
 
 
