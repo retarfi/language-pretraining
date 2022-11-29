@@ -89,7 +89,7 @@ def mp_tokenize(
         sudachi_config_path=sudachi_config_path,
         sudachi_resource_dir=sudachi_resource_dir,
         sudachi_dict_type=sudachi_dict_type,
-        ignore_max_byte_error=ignore_max_byte_error
+        ignore_max_byte_error=ignore_max_byte_error,
     )
     if num_file == 0 and use_tqdm:
         line_all = int(
@@ -105,11 +105,15 @@ def mp_tokenize(
             else:
                 if ignore_runtime_error:
                     try:
-                        outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + "\n")
+                        outfile.write(
+                            " ".join(main_tokenizer.tokenize(line.strip())) + "\n"
+                        )
                     except RuntimeError:
                         pass
                 else:
-                    outfile.write(" ".join(main_tokenizer.tokenize(line.strip())) + "\n")
+                    outfile.write(
+                        " ".join(main_tokenizer.tokenize(line.strip())) + "\n"
+                    )
             if num_file == 0 and use_tqdm:
                 pbar.update(1)
     if num_file == 0 and use_tqdm:
@@ -129,7 +133,7 @@ def pre_tokenize(
     sudachi_resource_dir: str,
     sudachi_dict_type: str,
     use_tqdm: bool = True,
-    ignore_max_byte_error: bool = False
+    ignore_max_byte_error: bool = False,
 ) -> str:
     logger.info("Pre-tokenizing...")
     input_file_or_dir: str
@@ -150,7 +154,7 @@ def pre_tokenize(
             sudachi_resource_dir=sudachi_resource_dir,
             sudachi_dict_type=sudachi_dict_type,
             use_tqdm=use_tqdm,
-            ignore_max_byte_error=ignore_max_byte_error
+            ignore_max_byte_error=ignore_max_byte_error,
         )
         logger.info(f"Pre-tokenized files are saved in {str(pretokenized_plib_file)}")
         input_file_or_dir = str(pretokenized_plib_file)
@@ -176,7 +180,7 @@ def pre_tokenize(
                         sudachi_resource_dir,
                         sudachi_dict_type,
                         use_tqdm,
-                        ignore_max_byte_error
+                        ignore_max_byte_error,
                     ),
                 )
                 for i in range(num_files)
@@ -245,15 +249,13 @@ def train_tokenizer(
                 lowercase=True,
             )
         special_tokens = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
-        special_tokens += [
-            "<unused{}>".format(i) for i in range(num_unused_tokens)
-        ]
+        special_tokens += ["<unused{}>".format(i) for i in range(num_unused_tokens)]
         tokenizer.train(
             files=files,
             vocab_size=vocab_size,
             min_frequency=min_frequency,
             limit_alphabet=limit_alphabet,
-            special_tokens=special_tokens
+            special_tokens=special_tokens,
         )
         # save tokenizer
         tokenizer.save_model(output_dir)
@@ -271,12 +273,22 @@ if __name__ == "__main__":
         type=str,
         choices=["mecab", "juman", "sudachi", "spacy-luw", "none", "basic"],
     )
-    parser.add_argument("--input_file", required=True, type=str)
+    parser.add_argument(
+        "--input_file",
+        required=True,
+        type=str,
+        help="In the text file, new line is inserted between two sentences. (For NSP) break line is inserted between two paragraphs.",
+    )
     parser.add_argument("--model_dir", required=True, type=str)
     parser.add_argument("--language", type=str, default="ja", choices=["ja", "en"])
     # parallel option
     parser.add_argument("--intermediate_dir", type=str, default="tmp")
-    parser.add_argument("--num_files", type=int, default=1)
+    parser.add_argument(
+        "--num_files",
+        type=int,
+        default=1,
+        help="Number of split files. It enables multiprocessing. Using multiprocessing with spacy-luw will not work.",
+    )
     # pre-tokenize(mainword) option
     parser.add_argument("--pretokenized_prefix", type=str, default="_pretokenized")
     # subword training option
@@ -298,16 +310,28 @@ if __name__ == "__main__":
         type=str,
         default="",
         choices=["", "unidic_lite", "unidic", "ipadic"],
+        help="From jptranstokenizer library",
     )
-    parser.add_argument("--mecab_option", type=str, default="")
+    parser.add_argument(
+        "--mecab_option", type=str, default="", help="From jptranstokenizer library"
+    )
     # sudachi option
-    parser.add_argument("--sudachi_split_mode", default="", choices=["A", "B", "C", ""])
-    parser.add_argument("--sudachi_config_path")
-    parser.add_argument("--sudachi_resource_dir")
-    parser.add_argument("--sudachi_dict_type")
+    parser.add_argument(
+        "--sudachi_split_mode",
+        default="",
+        choices=["A", "B", "C", ""],
+        help="From jptranstokenizer library",
+    )
+    parser.add_argument("--sudachi_config_path", help="From jptranstokenizer library")
+    parser.add_argument("--sudachi_resource_dir", help="From jptranstokenizer library")
+    parser.add_argument("--sudachi_dict_type", help="From jptranstokenizer library")
     # other option
     parser.add_argument("--disable_tqdm", action="store_true")
-    parser.add_argument("--ignore_max_byte_error", action="store_true")
+    parser.add_argument(
+        "--ignore_max_byte_error",
+        action="store_true",
+        help="Please see get_word_tokenizer document of jptranstokenizer library.",
+    )
     args = parser.parse_args()
 
     # assertion
@@ -350,7 +374,7 @@ if __name__ == "__main__":
             sudachi_resource_dir=args.sudachi_resource_dir,
             sudachi_dict_type=args.sudachi_dict_type,
             use_tqdm=use_tqdm,
-            ignore_max_byte_error=args.ignore_max_byte_error
+            ignore_max_byte_error=args.ignore_max_byte_error,
         )
     else:
         input_file_or_dir = args.input_file
@@ -363,5 +387,5 @@ if __name__ == "__main__":
         limit_alphabet=args.limit_alphabet,
         num_unused_tokens=args.num_unused_tokens,
         tokenizer_type=args.tokenizer_type,
-        language=args.language
+        language=args.language,
     )
