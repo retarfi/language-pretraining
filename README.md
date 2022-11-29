@@ -11,7 +11,7 @@
   </a>
 </p>
 
-This is a repository of pretrained Japapanese BERT and ELECTRA models.
+This is a repository of pretrained Japapanese transformer-based models.
 The models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab).
 BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base models trained by Wikipedia or financial dataset is available in this URL.
 
@@ -71,6 +71,7 @@ Following models are available now:
 
 - BERT
 - ELECTRA
+- RoBERTa
 
 The architecture of BERT-small, BERT-base, ELECTRA-small-paper, ELECTRA-base models are the same as those in [the original ELECTRA paper](https://arxiv.org/abs/2003.10555) (ELECTRA-small-paper is described as ELECTRA-small in the paper).
 The architecture of ELECTRA-small is the same as that in [the ELECTRA implementation by Google](https://github.com/google-research/electra).
@@ -113,22 +114,25 @@ The financial corpus file is 5.2GB, consisting of approximately 27M sentences.
 ### Train Tokenizer
 
 In our pretrained models, the texts are first tokenized by [MeCab](https://taku910.github.io/mecab/) with [IPAdic](https://pypi.org/project/ipadic/) dictionary and then split into subwords by the WordPiece algorithm.
-For MeCab dictionary, [unidic](https://github.com/polm/unidic-lite) and unidic-lite are also available.
-[Sentencepiece](https://github.com/google/sentencepiece) is also available for subword algorithm, but we do not validate performance.
+From v2.2.0, [jptranstokenizer](https://github.com/retarfi/jptranstokenizer) is required, which enables to use word tokenizers other than MeCab, such as Juman++, Sudachi, and spaCy LUW.
+For subword tokenization, [sentencepiece](https://github.com/google/sentencepiece) is also available for subword algorithm, but we do not validate performance.
 
 ```
 $ python train_tokenizer.py \
+--word_tokenizer mecab \
 --input_file corpus.txt \
 --model_dir tokenizer/ \
 --intermediate_dir ./data/corpus_split/ \
---num_files 20 \
 --mecab_dic_type ipadic \
 --tokenizer_type wordpiece \
 --vocab_size 32768 \
 --min_frequency 2 \
---limit_alphabet 6129 \
---num_unused_tokens 10
+--limit_alphabet 2900 \
+--num_unused_tokens 10 \
+--mecab_dic_type ipadic
 ```
+
+You can see all the arguments with `python train_tokenizer.py --help`
 
 ### Create Dataset
 
@@ -143,40 +147,27 @@ We show 3 examples to create dataset.
 
 ```
 $ python create_datasets.py \
---tokenizer_name_or_path tokenizer/ \
 --input_corpus wiki-ja \
---max_length 128 \
---dataset_type nsp \
+--max_length 512 \
 --input_file corpus.txt \
---dataset_dir datasets/ \
---tokenizer_type wordpiece \
---mecab_dic_type ipadic
+--mask_style bert \
+--tokenizer_name_or_path tokenizer/vocab.txt \
+--word_tokenizer_type mecab \
+--subword_tokenizer_type wordpiece \
+--mecab_dic ipadic
 ```
 
 - When you use the tokenizer existing in [HuggingFace Hub](https://huggingface.co/):
 
 ```
 $ python create_datasets.py \
---tokenizer_name_or_path izumi-lab/bert-small-japanese \
 --input_corpus wiki-ja \
---max_length 128 \
---dataset_type linebyline \
+--max_length 512 \
 --input_file corpus.txt \
---dataset_dir datasets/
+--mask_style roberta-wwm \
+--tokenizer_name_or_path izumi-lab/bert-small-japanese \
+--load_from_hub
 ```
-
-- When you use English Wikipedia or OpenWebText as the dataset:
-
-```
-$ python create_datasets.py \
---tokenizer_name_or_path bert-base-uncased \
---input_corpus openwebtext \
---max_length 128 \
---dataset_type linebyline \
---dataset_dir datasets/
-```
-
-In English, available datasets are limited `wiki-en` and `openwebtext`.
 
 ### Training
 
@@ -204,7 +195,9 @@ For example, `bert-base-dist` model is defined in parameter.json:
     },
     "train-steps" : 1000000,
     "save-steps" : 50000,
-    "logging-steps" : 5000
+    "logging-steps" : 5000,
+    "fp16-type": 0,
+    "bf16": false
 }
 ```
 
@@ -212,7 +205,7 @@ In this case, node 0 and node 1 have 80 batch sizes and node 2 and node 3 have 4
 If node 0 has 2 GPUs, each GPU have a 40 batch size.
 **10G or higher network speed** is recommended for training with multi-nodes.
 
-`fp16_type` argument specifies which precision mode to use:
+`fp16-type` argument specifies which precision mode to use:
 
 - 0: FP32 training
 - 1: Mixed Precision
@@ -221,19 +214,23 @@ If node 0 has 2 GPUs, each GPU have a 40 batch size.
 
 In detail, please see [NVIDIA Apex document](https://nvidia.github.io/apex/amp.html).
 
+`bf16` argument determine whether bfloat16 is enabled or not.  
+You cannot use `fp16-type` (1, 2 or 3) and `bf16` (true) simultaneously.
+
 The whole word masking option is also available.
 
 ```
 # Train with 1 node
 $ python run_pretraining.py \
---tokenizer_name_or_path tokenizer/ \
 --dataset_dir ./datasets/nsp_128_wiki-ja/ \
 --model_dir ./model/bert/ \
 --parameter_file parameter.json \
 --model_type bert-small \
---fp16_type 0 \
---tokenizer_type wordpiece \
+--tokenizer_name_or_path tokenizer/vocab.txt \
+--word_tokenizer_type mecab \
+--subword_tokenizer_type wordpiece \
 --mecab_dic_type ipadic \
+(--use_deepspeed \)
 (--do_whole_word_mask \)
 (--do_continue)
 
@@ -241,14 +238,15 @@ $ python run_pretraining.py \
 $ NCCL_SOCKET_IFNAME=eno1 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 --nproc_per_node=2 --nnodes=2 --node_rank=0 --master_addr="10.0.0.1" \
 --master_port=50916 run_pretraining.py \
---tokenizer_name_or_path tokenizer/ \
 --dataset_dir ./datasets/nsp_128_wiki-ja/ \
 --model_dir ./model/bert/ \
 --parameter_file parameter.json \
 --model_type bert-small \
---fp16_type 0 \
---tokenizer_type wordpiece \
+--tokenizer_name_or_path tokenizer/vocab.txt \
+--word_tokenizer_type mecab \
+--subword_tokenizer_type wordpiece \
 --mecab_dic_type ipadic \
+(--use_deepspeed \)
 (--do_whole_word_mask \)
 (--do_continue)
 ```
@@ -268,7 +266,9 @@ For example, `bert-small-additional` model is defined in parameter.json:
         "-1" : 128
     },
     "train-steps" : 1450000,
-    "save-steps" : 100000
+    "save-steps" : 100000,
+    "fp16-type": 0,
+    "bf16": false
 }
 ```
 
@@ -313,11 +313,8 @@ Tensorboard is available for the training log.
 
 ## Roadmap
 
-- [ ] Better creation method with linebyline datasets
-- [ ] Update models in Hugging Face's page
 - [ ] Apply code formatter (black and flake8)
-- [ ] Add RoBERTa feature (tokenizer and pre-training method)
-- [ ] Add available word segmentation (other than MeCab)
+- [ ] Add DeBERTa feature
 
 See the [open issues](https://github.com/retarfi/language-pretraining/issues) for a full list of proposed features (and known issues).
 
