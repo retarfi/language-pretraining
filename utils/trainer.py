@@ -9,6 +9,7 @@ from transformers.integrations import (
     WandbCallback,
     rewrite_logs
 )
+from transformers.pytorch_utils import is_torch_less_than_1_11
 from transformers.trainer import *
 from transformers.utils import logging
 
@@ -358,7 +359,7 @@ class MyTrainer(Trainer):
             or self.fsdp is not None
         )
         if args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
+            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init_redefined(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
             )
             self.model = deepspeed_engine.module
@@ -569,11 +570,17 @@ class MyTrainer(Trainer):
                 if self.deepspeed:
                     self.deepspeed.step()
 
-                if (step + 1) % args.gradient_accumulation_steps == 0 or (
+                #! CHANGED!!
+                if (not self.deepspeed and ((step + 1) % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
-                ):
+                ))) or (self.deepspeed and self.deepspeed.tput_timer.total_step_count % args.gradient_accumulation_steps == 0):
+                # if (step + 1) % args.gradient_accumulation_steps == 0 or (
+                #     # last step in epoch but step is always smaller than gradient_accumulation_steps
+                #     steps_in_epoch <= args.gradient_accumulation_steps
+                #     and (step + 1) == steps_in_epoch
+                # ):
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
@@ -843,6 +850,10 @@ class MyTrainer(Trainer):
 
         #! THIS IS CHANGED!!
         # return loss.detach()
+        if gen_loss is not None:
+            gen_loss = gen_loss.detach()
+        if disc_loss is not None:
+            disc_loss = disc_loss.detach()
         return (loss.detach(), gen_loss, disc_loss)
 
     def compute_loss(self, model, inputs, return_outputs=False): #L2508
@@ -883,3 +894,97 @@ class MyTrainer(Trainer):
         #! THIS IS CHANGED!!
         # return (loss, outputs) if return_outputs else loss
         return (loss, gen_loss, disc_loss, outputs) if return_outputs else (loss, gen_loss, disc_loss)
+
+
+def deepspeed_init_redefined(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+    """
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If `resume_from_checkpoint` was passed then an attempt to resume from a previously saved checkpoint will be made.
+
+    Args:
+        trainer: Trainer object
+        num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+        inference: launch in inference mode (no optimizer and no lr scheduler)
+
+    Returns: model, optimizer, lr_scheduler
+
+    We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
+    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
+    can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
+
+    """
+    import deepspeed
+    from deepspeed.utils import logger as ds_logger
+    from transformers.deepspeed import deepspeed_optim_sched
+    from copy import deepcopy
+
+    model = trainer.model
+    args = trainer.args
+
+    if hasattr(trainer, "hf_deepspeed_config_orig"):
+        hf_deepspeed_config = deepcopy(trainer.hf_deepspeed_config_orig)
+    else:
+        hf_deepspeed_config = args.hf_deepspeed_config
+        trainer.hf_deepspeed_config_orig = deepcopy(args.hf_deepspeed_config)
+
+    # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
+    config = hf_deepspeed_config.config
+
+    # set the Deepspeed log level consistent with the Trainer
+    ds_logger.setLevel(args.get_process_log_level())
+
+    if inference:
+        # only Z3 makes sense for the inference
+        if not hf_deepspeed_config.is_zero3():
+            raise ValueError("ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config")
+
+        # in case the training config is re-used for inference
+        hf_deepspeed_config.del_config_sub_tree("optimizer")
+        hf_deepspeed_config.del_config_sub_tree("lr_scheduler")
+        optimizer, lr_scheduler = None, None
+        model_parameters = None
+    else:
+        trainer.optimizer = None  # important for when deepspeed_init is used as re-init
+        optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
+        model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+
+    # keep for quick debug:
+    # from pprint import pprint; pprint(config)
+
+    kwargs = dict(
+        model=model,
+        model_parameters=model_parameters,
+        config_params=config,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+    )
+
+    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+
+    if resume_from_checkpoint is not None:
+
+        # it's possible that the user is trying to resume from model_path, which doesn't necessarily
+        # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
+        # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
+        # path contains what looks like a deepspeed checkpoint
+        import glob
+
+        deepspeed_checkpoint_dirs = sorted(glob.glob(f"{resume_from_checkpoint}/global_step*"))
+
+        if len(deepspeed_checkpoint_dirs) > 0:
+            logger.info(f"Attempting to resume from {resume_from_checkpoint}")
+            # ! THESE CODES BELOW ARE CHANGED
+            tag = os.path.basename(deepspeed_checkpoint_dirs[0])
+            # this magically updates self.optimizer and self.lr_scheduler
+            load_path, _ = deepspeed_engine.load_checkpoint(
+                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True, tag=tag
+            )
+            if load_path is None:
+                raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
+        else:
+            logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
+
+    return deepspeed_engine, optimizer, lr_scheduler
