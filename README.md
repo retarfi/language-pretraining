@@ -330,7 +330,7 @@ Be sure to check here again when you cite.**
 
 ```
 @inproceedings{Suzuki-etal-2022-ipm,
-  title = {Construction and Validation of a Pre-Training and Additional Pre-Training Financial Language Model}
+  title = {Constructing and analyzing domain-specific language model for financial text mining}
   author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
   journal = {Information Processing & Management},
   volume = {60},
