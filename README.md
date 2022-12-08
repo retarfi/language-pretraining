@@ -329,19 +329,21 @@ See the [open issues](https://github.com/retarfi/language-pretraining/issues) fo
 Be sure to check here again when you cite.**
 
 ```
-@inproceedings{suzuki-etal-2022-sigfin,
+@inproceedings{Suzuki-etal-2022-ipm,
   title = {Construction and Validation of a Pre-Training and Additional Pre-Training Financial Language Model}
   author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
-  month = {mar},
+  journal = {Information Processing & Management},
+  volume = {60},
+  number = {2},
   year = {2022},
-  booktitle = {"Proceedings of JSAI Special Interest Group on Financial Infomatics (SIG-FIN) 28"}
+  doi = {10.1016/j.ipm.2022.103194}
 }
 ```
 
 ### This Implementation
 
 ```
-@misc{suzuki-2021-github,
+@misc{Suzuki-2021-github,
   author = {Masahiro Suzuki},
   title = {BERT and ELECTRA Models for Japanese},
   year = {2021},
