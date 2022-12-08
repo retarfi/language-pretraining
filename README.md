@@ -335,7 +335,8 @@ Be sure to check here again when you cite.**
   journal = {Information Processing & Management},
   volume = {60},
   number = {2},
-  year = {2022},
+  pages = {103194},
+  year = {2023},
   doi = {10.1016/j.ipm.2022.103194}
 }
 ```
