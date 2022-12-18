@@ -219,7 +219,8 @@ def train_tokenizer(
 
         spm.SentencePieceTrainer.Train(
             input=files,
-            model_type="word",
+            model_type="unigram",
+            split_by_whitespace=True,
             # model_dir=output_dir,
             vocab_size=vocab_size,
             model_prefix=os.path.join(output_dir, "spiece"),
