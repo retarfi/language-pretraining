@@ -200,7 +200,7 @@ def train_tokenizer(
     num_unused_tokens: int,
     tokenizer_type: str,
     language: str,
-    split_by_whitespace: bool
+    split_by_whitespace: bool = True
 ) -> None:
 
     if os.path.isfile(input_file_or_dir):
