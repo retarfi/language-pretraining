@@ -200,6 +200,7 @@ def train_tokenizer(
     num_unused_tokens: int,
     tokenizer_type: str,
     language: str,
+    split_by_whitespace: bool
 ) -> None:
 
     if os.path.isfile(input_file_or_dir):
@@ -220,7 +221,7 @@ def train_tokenizer(
         spm.SentencePieceTrainer.Train(
             input=files,
             model_type="unigram",
-            split_by_whitespace=True,
+            split_by_whitespace=split_by_whitespace,
             # model_dir=output_dir,
             vocab_size=vocab_size,
             model_prefix=os.path.join(output_dir, "spiece"),
@@ -389,4 +390,5 @@ if __name__ == "__main__":
         num_unused_tokens=args.num_unused_tokens,
         tokenizer_type=args.tokenizer_type,
         language=args.language,
+        split_by_whitespace=bool(args.word_tokenizer in ["mecab", "juman", "sudachi", "spacy-luw"])
     )
