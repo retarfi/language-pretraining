@@ -16,6 +16,7 @@ import create_datasets
         ["nsp", "none", does_not_raise()],
         ["", "roberta", does_not_raise()],
         ["", "deberta-wwm", does_not_raise()],
+        ["", "debertav2", does_not_raise()],
         ["", "electra", does_not_raise()],
         ["", "electra-wwm", does_not_raise()],
         ["", "bert", pytest.raises(AssertionError)],

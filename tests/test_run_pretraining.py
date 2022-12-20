@@ -13,11 +13,13 @@ sys.path.append("../")
 import run_pretraining
 
 
+
 @pytest.mark.parametrize(
     "model_name, dataset_dirname, is_dataset_masked, expectation",
     [
         ["bert", "nsp_128_test", False, does_not_raise()],
-        ["debertav2", "linebyline_128_test_deberta-wwm", True, does_not_raise()],
+        ["deberta", "linebyline_128_test_deberta-wwm", True, does_not_raise()],
+        ["debertav2", "linebyline_128_test", False, does_not_raise()],
         ["electra", "linebyline_128_test_electra", True, does_not_raise()],
         ["electra", "linebyline_128_test_electra-wwm", True, does_not_raise()],
         ["roberta", "linebyline_128_test_roberta", True, does_not_raise()],
@@ -44,6 +46,8 @@ def test_run_pretraining(
             "train-steps": 20,
             "save-steps": 15,
             "logging-steps": 5,
+            "fp16-type": 1,
+            "bf16": False
         }
         if model_name == "electra":
             params["embedding-size"] = 64

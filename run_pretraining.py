@@ -25,6 +25,7 @@ transformers.logging.enable_explicit_format()
 
 import utils
 from utils.logger import make_logger_setting
+from models import DebertaEmdForPreTraining, DebertaV2EmdForPreTraining
 
 
 # logger
@@ -58,7 +59,12 @@ def get_model(
         if model_name == "debertav2":
             model_name = "deberta-v2"
         MappedConfig = auto.CONFIG_MAPPING[model_name]
-        MappedModel = auto.MODEL_FOR_PRETRAINING_MAPPING[MappedConfig]
+        if model_name == "deberta":
+            MappedModel = DebertaEmdForPreTraining
+        elif model_name == "deberta-v2":
+            MappedModel = DebertaV2EmdForPreTraining
+        else:
+            MappedModel = auto.MODEL_FOR_PRETRAINING_MAPPING[MappedConfig]
         if load_pretrained:
             model = MappedModel.from_pretrained(
                 param_config["pretrained_model_name_or_path"]
@@ -85,16 +91,23 @@ def get_model(
                 "num_attention_heads": param_config["attention-heads"],
                 "intermediate_size": param_config["ffn-inner-hidden-size"],
             }
-            if model_name in ["deberta-v2", "roberta"]:
+            if model_name == "roberta":
                 dct_kwargs["bos_token_id"] = tokenizer.cls_token_id
                 dct_kwargs["eos_token_id"] = tokenizer.sep_token_id
-            if model_name == "roberta":
                 dct_kwargs["max_position_embeddings"] = (
                     param_config["sequence-length"] + tokenizer.pad_token_id + 1
                 )
+                dct_kwargs["layer_norm_eps"] = 1e-5
+                dct_kwargs["token_vocab_size"] = 1
             else:
                 # for bert, deberta, roberta
                 dct_kwargs["max_position_embeddings"] = param_config["sequence-length"]
+                if model_name in ["deberta", "deberta-v2"]:
+                    dct_kwargs["token_vocab_size"] = 0
+                    dct_kwargs["relative_attention"] = True
+                    dct_kwargs["position_biased_input"] = False
+                    dct_kwargs["pos_att_type"] = "c2p|p2c"
+                    dct_kwargs["max_relative_positions"] = -1
             config = MappedConfig(**dct_kwargs)
             model = MappedModel(config=config)
     return model
@@ -305,7 +318,7 @@ def run_pretraining(
     logger.info(f"{model_name} model is loaded")
 
     # data collator
-    if model_name in ["bert", "roberta", "debertav2"]:
+    if model_name in ["bert", "roberta", "deberta", "debertav2"]:
         mlm_probability = 0.15
     elif model_name == "electra":
         mlm_probability = param_config["mask-percent"] / 100
@@ -354,6 +367,8 @@ def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
         model_name = "roberta"
     elif "debertav2-" in model_type.lower():
         model_name = "debertav2"
+    elif "deberta-" in model_type.lower():
+        model_name = "deberta"
     elif "bert-" in model_type.lower():
         model_name = "bert"
     else:
@@ -370,8 +385,10 @@ def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
     ):
         load_pretrained = True
         set_assert = {"flozen-layers"}
-        if model_name in ["bert", "roberta", "debertav2"]:
+        if model_name in ["bert", "roberta", "deberta", "debertav2"]:
             set_assert = set_assert | {"pretrained_model_name_or_path"}
+            if model_name in ["deberta", "debertav2"]:
+                set_assert = set_assert | {"pos_att_type"}
         if model_name == "electra":
             set_assert = set_assert | {
                 f"pretrained_{x}_model_name_or_path"

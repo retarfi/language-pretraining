@@ -153,6 +153,23 @@
         "fp16-type": 0,
         "bf16": false
     },
+    "deberta-base" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 3072,
+        "attention-heads" : 12,
+        "warmup-steps" : 10000,
+        "learning-rate" : 2e-4,
+        "batch-size" : {
+            "-1" : 2000
+        },
+        "train-steps" : 1000000,
+        "save-steps" : 10000,
+        "logging-steps" : 5000,
+        "fp16-type": 0,
+        "bf16": false
+    },
     "bert-base-dist" : {
         "number-of-layers" : 12,
         "hidden-size" : 768,
