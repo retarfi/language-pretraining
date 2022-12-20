@@ -256,15 +256,15 @@ def get_mask_datacollator(
 ) -> DataCollatorMixin:
     class_datacollator: DataCollatorMixin
     if do_whole_word_mask:
-        if model_name in ["bert", "roberta", "deberta"]:
-            class_datacollator = DataCollatorForWholeWordMask
-        elif model_name == "electra":
+        if model_name == "electra":
             class_datacollator = DataCollatorForWholeWordMaskWithElectra
+        else:
+            class_datacollator = DataCollatorForWholeWordMask
     else:
-        if model_name in ["bert", "roberta", "deberta"]:
-            class_datacollator = DataCollatorForLanguageModeling
-        elif model_name == "electra":
+        if model_name == "electra":
             class_datacollator = DataCollatorForLanguageModelingWithElectra
+        else:
+            class_datacollator = DataCollatorForLanguageModeling
     data_collator: DataCollatorForLanguageModeling = class_datacollator(
         tokenizer=tokenizer, mlm=True, mlm_probability=mlm_probability
     )
