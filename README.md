@@ -22,19 +22,6 @@ BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base mode
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#pre-trained-models">Pre-trained Models</a>
-      <ul>
-        <li><a href="#model-architecture">Model Architecture</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#training-data">Training Data</a>
-      <ul>
-        <li><a href="#wikipedia-model">Wikipedia Model</a></li>
-        <li><a href="#financial-model">Financial Model</a></li>
-      </ul>
-    </li>
-    <li>
       <a href="#usage">Usage</a>
       <ul>
         <li><a href="#train-tokenizer">Train Tokenizer</a></li>
@@ -47,6 +34,19 @@ BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base mode
             <li><a href="#training-log">Training Log</a></li>
           </ul>
         </li>
+      </ul>
+    </li>
+    <li>
+      <a href="#pre-trained-models">Pre-trained Models</a>
+      <ul>
+        <li><a href="#model-architecture">Model Architecture</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#training-data">Training Data</a>
+      <ul>
+        <li><a href="#wikipedia-model">Wikipedia Model</a></li>
+        <li><a href="#financial-model">Financial Model</a></li>
       </ul>
     </li>
     <li><a href="#roadmap">Roadmap</a></li>
@@ -63,59 +63,14 @@ BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base mode
   </ol>
 </details>
 
-## Pre-trained Models
-
-### Model Architecture
-
-Following models are available now:
-
-- BERT
-- ELECTRA
-- RoBERTa
-
-The architecture of BERT-small, BERT-base, ELECTRA-small-paper, ELECTRA-base models are the same as those in [the original ELECTRA paper](https://arxiv.org/abs/2003.10555) (ELECTRA-small-paper is described as ELECTRA-small in the paper).
-The architecture of ELECTRA-small is the same as that in [the ELECTRA implementation by Google](https://github.com/google-research/electra).
-
-|    Parameter     | BERT-small | BERT-base | ELECTRA-small | ELECTRA-small-paper | ELECTRA-base |
-| :--------------: | :--------: | :-------: | :-----------: | :-----------------: | :----------: |
-| Number of layers |     12     |    12     |      12       |         12          |      12      |
-|   Hidden Size    |    256     |    768    |      256      |         256         |     768      |
-| Attention Heads  |     4      |    12     |       4       |          4          |      12      |
-|  Embedding Size  |    128     |    512    |      128      |         128         |     128      |
-|  Generator Size  |     -      |     -     |      1/1      |         1/4         |     1/3      |
-|   Train Steps    |   1.45M    |    1M     |      1M       |         1M          |     766k     |
-
-Other models such as BERT-large or ELECTRA-large are also available in this implementation.
-You can also add your original parameters in parameter.json.
-
-### Training Data
-
-Training data are aggregated to a text file.
-Each sentence is in one line and a blank line is inserted between documents.
-
-#### Wikipedia Model
-
-The normal models (not financial models) are trained on the Japanese version of Wikipedia, using [Wikipedia dump](https://dumps.wikimedia.org/jawiki/) file as of June 1, 2021.
-The corpus file is 2.9GB, consisting of approximately 20M sentences.
-
-#### Financial Model
-
-The financial models are trained on Wikipedia corpus and financial corpus.
-The Wikipedia corpus is the same as described above.
-The financial corpus consists of 2 corpora:
-
-- Summaries of financial results from October 9, 2012, to December 31, 2020
-- Securities reports from February 8, 2018, to December 31, 2020
-
-The financial corpus file is 5.2GB, consisting of approximately 27M sentences.
 
 ## Usage
 
 ### Train Tokenizer
 
 In our pretrained models, the texts are first tokenized by [MeCab](https://taku910.github.io/mecab/) with [IPAdic](https://pypi.org/project/ipadic/) dictionary and then split into subwords by the WordPiece algorithm.
-From v2.2.0, [jptranstokenizer](https://github.com/retarfi/jptranstokenizer) is required, which enables to use word tokenizers other than MeCab, such as Juman++, Sudachi, and spaCy LUW.
-For subword tokenization, [sentencepiece](https://github.com/google/sentencepiece) is also available for subword algorithm, but we do not validate performance.
+From v3.0.0, [jptranstokenizer](https://github.com/retarfi/jptranstokenizer) is required, which enables to use word tokenizers other than MeCab, such as Juman++, Sudachi, and spaCy LUW.
+For subword tokenization, [SentencePiece](https://github.com/google/sentencepiece) is also available for subword algorithm.
 
 ```
 $ python train_tokenizer.py \
@@ -309,12 +264,53 @@ In this example, the generator model is saved in `./model/electra/extracted-1000
 
 Tensorboard is available for the training log.
 
-<!-- ROADMAP -->
+## Pre-trained Models
+
+### Model Architecture
+
+Following models are available now:
+
+- BERT
+- ELECTRA
+
+The architecture of BERT-small, BERT-base, ELECTRA-small-paper, ELECTRA-base models are the same as those in [the original ELECTRA paper](https://arxiv.org/abs/2003.10555) (ELECTRA-small-paper is described as ELECTRA-small in the paper).
+The architecture of ELECTRA-small is the same as that in [the ELECTRA implementation by Google](https://github.com/google-research/electra).
+
+|    Parameter     | BERT-small | BERT-base | ELECTRA-small | ELECTRA-small-paper | ELECTRA-base |
+| :--------------: | :--------: | :-------: | :-----------: | :-----------------: | :----------: |
+| Number of layers |     12     |    12     |      12       |         12          |      12      |
+|   Hidden Size    |    256     |    768    |      256      |         256         |     768      |
+| Attention Heads  |     4      |    12     |       4       |          4          |      12      |
+|  Embedding Size  |    128     |    512    |      128      |         128         |     128      |
+|  Generator Size  |     -      |     -     |      1/1      |         1/4         |     1/3      |
+|   Train Steps    |   1.45M    |    1M     |      1M       |         1M          |     766k     |
+
+Other models such as BERT-large or ELECTRA-large are also available in this implementation.
+You can also add your original parameters in parameter.json.
+
+### Training Data
+
+Training data are aggregated to a text file.
+Each sentence is in one line and a blank line is inserted between documents.
+
+#### Wikipedia Model
+
+The normal models (not financial models) are trained on the Japanese version of Wikipedia, using [Wikipedia dump](https://dumps.wikimedia.org/jawiki/) file as of June 1, 2021.
+The corpus file is 2.9GB, consisting of approximately 20M sentences.
+
+#### Financial Model
+
+The financial models are trained on Wikipedia corpus and financial corpus.
+The Wikipedia corpus is the same as described above.
+The financial corpus consists of 2 corpora:
+
+- Summaries of financial results from October 9, 2012, to December 31, 2020
+- Securities reports from February 8, 2018, to December 31, 2020
+
+The financial corpus file is 5.2GB, consisting of approximately 27M sentences.
+
 
 ## Roadmap
-
-- [ ] Apply code formatter (black and flake8)
-- [ ] Add DeBERTa feature
 
 See the [open issues](https://github.com/retarfi/language-pretraining/issues) for a full list of proposed features (and known issues).
 
@@ -326,7 +322,7 @@ See the [open issues](https://github.com/retarfi/language-pretraining/issues) fo
 Be sure to check here again when you cite.**
 
 ```
-@inproceedings{Suzuki-etal-2022-ipm,
+@inproceedings{Suzuki-etal-2023-ipm,
   title = {Constructing and analyzing domain-specific language model for financial text mining}
   author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
   journal = {Information Processing & Management},
@@ -355,7 +351,7 @@ Be sure to check here again when you cite.**
 
 The pretrained models are distributed under the terms of the [Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
-The codes in this repository are distributed under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+The codes in this repository are distributed under MIT.
 
 ## Related Work
 
@@ -372,4 +368,4 @@ The codes in this repository are distributed under the [Apache License 2.0](http
 
 ## Acknowledgements
 
-This work was supported by JSPS KAKENHI Grant Number JP21K12010, and the JST-Mirai Program Grant Number JPMJMI20B1, Japan.
+This work was supported by JSPS KAKENHI Grant Number JP21K12010, JST-Mirai Program Grant Number JPMJMI20B1, and JST PRESTO Grand Number JPMJPR2267, Japan.
