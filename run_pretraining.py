@@ -25,6 +25,7 @@ transformers.logging.enable_explicit_format()
 
 import utils
 from utils.logger import make_logger_setting
+from utils.trainer import TRAINER_STATE_NAME
 from models import DebertaEmdForPreTraining, DebertaV2EmdForPreTraining
 
 
@@ -171,7 +172,7 @@ def run_pretraining(
     load_pretrained: bool,
     param_config: dict,
     is_dataset_masked: bool,
-    do_continue: bool = False,
+    resume_from_checkpoint: Optional[str] = None,
     do_whole_word_mask: bool = False,
     use_deepspeed: bool = False,
     deepspeed_bucket_size: float = 5e8,
@@ -190,11 +191,6 @@ def run_pretraining(
         )
     os.makedirs(model_dir, exist_ok=True)
 
-    # training argument
-    # if do_continue:
-    #     training_args = torch.load(os.path.join(model_dir, "training_args.bin"))
-    #     per_device_train_batch_size = training_args.per_device_train_batch_size
-    # else:
     if torch.cuda.device_count() > 0:
         per_device_train_batch_size = int(
             param_config["batch-size"][str(node_rank)] / torch.cuda.device_count()
@@ -298,10 +294,14 @@ def run_pretraining(
         report_to="tensorboard",
         deepspeed=deepspeed,
     )
-    if not do_continue:
+    if resume_from_checkpoint is None:
         if local_rank != -1:
             training_args.per_device_train_batch_size = per_device_train_batch_size
         torch.save(training_args, os.path.join(model_dir, "training_args.bin"))
+    else:
+        assert os.path.isfile(
+            os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
+        ), f"{TRAINER_STATE_NAME} must exist in the checkpoint directory"
 
     # dataset
     dataset = datasets.load_from_disk(dataset_dir)
@@ -348,7 +348,6 @@ def run_pretraining(
     trainer.real_batch_size = sum(param_config["batch-size"].values())
 
     logger.info("Pretraining starts.")
-    resume_from_checkpoint = True if do_continue else None
     trainoutput = trainer.train(
         resume_from_checkpoint=resume_from_checkpoint,
         do_log_loss_gen_disc=bool(model_name == "electra"),
@@ -452,7 +451,7 @@ if __name__ == "__main__":
     # optional
     parser.add_argument("--run_name", type=str, default="")
     parser.add_argument("--do_whole_word_mask", action="store_true")
-    parser.add_argument("--do_continue", action="store_true")
+    parser.add_argument("--resume_from_checkpoint", type=str)
     parser.add_argument(
         "--is_dataset_masked",
         action="store_true",
@@ -494,7 +493,7 @@ if __name__ == "__main__":
         load_pretrained=load_pretrained,
         param_config=param_config[args.model_type],
         do_whole_word_mask=args.do_whole_word_mask,
-        do_continue=args.do_continue,
+        resume_from_checkpoint=args.resume_from_checkpoint,
         is_dataset_masked=args.is_dataset_masked,
         use_deepspeed=args.use_deepspeed,
         deepspeed_bucket_size=args.deepspeed_bucket_size,
