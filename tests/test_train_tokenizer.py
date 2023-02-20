@@ -54,17 +54,18 @@ def test_pre_tokenize(
 
 
 @pytest.mark.parametrize(
-    "input_file_or_dir, tokenizer_type",
+    "input_file_or_dir, tokenizer_type, spm_split_by_whitespace",
     [
-        (PRETOKENIZED_FILE, "sentencepiece"),
-        (PRETOKENIZED_FILE, "wordpiece"),
-        (PRETOKENIZED_DIR, "sentencepiece"),
-        (PRETOKENIZED_DIR, "wordpiece"),
+        (PRETOKENIZED_FILE, "sentencepiece", False),
+        (PRETOKENIZED_FILE, "wordpiece", False),
+        (PRETOKENIZED_DIR, "sentencepiece", True),
+        (PRETOKENIZED_DIR, "wordpiece", False),
     ],
 )
 def test_train_tokenizer(
     input_file_or_dir: str,
     tokenizer_type: str,
+    spm_split_by_whitespace: bool,
 ) -> None:
     output_dir: str = "output/"
     vocab_size: int = 800
@@ -80,5 +81,6 @@ def test_train_tokenizer(
         limit_alphabet=limit_alphabet,
         num_unused_tokens=num_unused_tokens,
         tokenizer_type=tokenizer_type,
-        language=language
+        language=language,
+        spm_split_by_whitespace=spm_split_by_whitespace,
     )

@@ -200,7 +200,7 @@ def train_tokenizer(
     num_unused_tokens: int,
     tokenizer_type: str,
     language: str,
-    split_by_whitespace: bool = True
+    spm_split_by_whitespace: bool = False,
 ) -> None:
 
     if os.path.isfile(input_file_or_dir):
@@ -221,7 +221,7 @@ def train_tokenizer(
         spm.SentencePieceTrainer.Train(
             input=files,
             model_type="unigram",
-            split_by_whitespace=split_by_whitespace,
+            split_by_whitespace=spm_split_by_whitespace,
             # model_dir=output_dir,
             vocab_size=vocab_size,
             model_prefix=os.path.join(output_dir, "spiece"),
@@ -268,7 +268,7 @@ def train_tokenizer(
 
 if __name__ == "__main__":
     # arguments
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--word_tokenizer",
         required=True,
@@ -300,6 +300,7 @@ if __name__ == "__main__":
         type=str,
         choices=["sentencepiece", "wordpiece"],
     )
+    parser.add_argument("--spm_split_by_whitespace", action="store_true")
     parser.add_argument("--vocab_size", type=int, default=32768)
     parser.add_argument("--min_frequency", type=int, default=2, help="only wordpiece")
     parser.add_argument(
@@ -390,5 +391,5 @@ if __name__ == "__main__":
         num_unused_tokens=args.num_unused_tokens,
         tokenizer_type=args.tokenizer_type,
         language=args.language,
-        split_by_whitespace=bool(args.word_tokenizer in ["mecab", "juman", "sudachi", "spacy-luw"])
+        spm_split_by_whitespace=args.spm_split_by_whitespace,
     )
