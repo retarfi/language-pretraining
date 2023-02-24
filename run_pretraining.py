@@ -92,22 +92,42 @@ def get_model(
                 "intermediate_size": param_config["ffn-inner-hidden-size"],
             }
             if model_name == "roberta":
-                dct_kwargs["bos_token_id"] = tokenizer.cls_token_id
-                dct_kwargs["eos_token_id"] = tokenizer.sep_token_id
-                dct_kwargs["max_position_embeddings"] = (
-                    param_config["sequence-length"] + tokenizer.pad_token_id + 1
+                dct_kwargs.update(
+                    {
+                        "bos_token_id": tokenizer.cls_token_id,
+                        "eos_token_id": tokenizer.sep_token_id,
+                        "max_position_embeddings": param_config["sequence-length"]
+                        + tokenizer.pad_token_id
+                        + 1,
+                        "layer_norm_eps": 1e-5,
+                        "token_vocab_size": 1,
+                    }
                 )
-                dct_kwargs["layer_norm_eps"] = 1e-5
-                dct_kwargs["token_vocab_size"] = 1
             else:
                 # for bert, deberta, roberta
                 dct_kwargs["max_position_embeddings"] = param_config["sequence-length"]
                 if model_name in ["deberta", "deberta-v2"]:
-                    dct_kwargs["token_vocab_size"] = 0
-                    dct_kwargs["relative_attention"] = True
-                    dct_kwargs["position_biased_input"] = False
-                    dct_kwargs["pos_att_type"] = "c2p|p2c"
-                    dct_kwargs["max_relative_positions"] = -1
+                    dct_kwargs.update(
+                        {
+                            "token_vocab_size": 0,
+                            "relative_attention": True,
+                            "position_biased_input": False,
+                            "pos_att_type": "p2c|c2p",
+                            "max_relative_positions": -1,
+                        }
+                    )
+                    if model_name == "deberta-v2":
+                        dct_kwargs.update(
+                            {
+                                "position_buckets": param_config["sequence-length"]
+                                // 2,
+                                "norm_rel_ebd": "layer_norm",
+                                "conv_kernel_size": 3,
+                                "conv_act": "gelu",
+                                "attention_head_size": dct_kwargs["hidden_size"]
+                                // dct_kwargs["num_attention_heads"],
+                            }
+                        )
             config = MappedConfig(**dct_kwargs)
             model = MappedModel(config=config)
     return model
@@ -229,7 +249,7 @@ def run_pretraining(
                     "warmup_max_lr": "auto",
                     "warmup_num_steps": "auto",
                     "total_num_steps": "auto",
-                    "warmup_type": "linear"
+                    "warmup_type": "linear",
                 },
             },
             "zero_optimization": {
@@ -244,7 +264,7 @@ def run_pretraining(
             },
             "gradient_accumulation_steps": "auto",
             "gradient_clipping": "auto",
-            "steps_per_print": 999999999999, #logging_steps * gradient_accumulation_steps,
+            "steps_per_print": 999999999999,  # logging_steps * gradient_accumulation_steps,
             # "train_batch_size": sum(param_config["batch-size"].values())
             # * gradient_accumulation_steps,
             "train_batch_size": "auto",
@@ -291,9 +311,9 @@ def run_pretraining(
         disable_tqdm=True,
         max_steps=param_config["train-steps"],
         gradient_accumulation_steps=gradient_accumulation_steps,
-        dataloader_num_workers=3,
-        dataloader_pin_memory=False,
-        dataloader_drop_last=True,
+        dataloader_num_workers=6,
+        dataloader_pin_memory=True,
+        dataloader_drop_last=False,
         local_rank=local_rank,
         report_to="tensorboard",
         deepspeed=deepspeed,
@@ -305,6 +325,12 @@ def run_pretraining(
 
     # dataset
     dataset = datasets.load_from_disk(dataset_dir)
+    total_batch_size: int = int(
+        sum(param_config["batch-size"].values()) * gradient_accumulation_steps
+    )
+    if len(dataset) < total_batch_size:
+        multiple: int = total_batch_size // len(dataset) + 1
+        dataset = datasets.concatenate_datasets([dataset] * multiple)
     dataset.set_format(type="torch")
     logger.info("Dataset is loaded")
 
@@ -407,7 +433,7 @@ def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
             "batch-size",
             "train-steps",
             "fp16-type",
-            "bf16"
+            "bf16",
         }
         if model_name == "electra":
             set_assert = set_assert | {
@@ -436,7 +462,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_dir", type=str, required=True, help="directory of corpus dataset"
     )
-    parser.add_argument("--model_dir", type=str, required=True, help="directory to save pretrained model")
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        required=True,
+        help="directory to save pretrained model",
+    )
     parser.add_argument(
         "--parameter_file",
         type=str,
@@ -471,9 +502,9 @@ if __name__ == "__main__":
 
     # global variables
     ram_gb: float = psutil.virtual_memory().total / 1073741824
-    # dev_count: int = max(torch.cuda.device_count(), 1)
-    # datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9 / dev_count) * 10**9
-    datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9) * 10**9
+    dev_count: int = max(torch.cuda.device_count(), 1)
+    datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9 / dev_count) * 10**9
+    # datasets.config.IN_MEMORY_MAX_SIZE = int(ram_gb * 0.9) * 10**9
 
     # parameter configuration
     with open(args.parameter_file, "r") as f:
