@@ -121,18 +121,60 @@ def add_arguments_for_tokenizer(parser: argparse.Namespace) -> None:
         choices=["basic", "mecab", "juman", "spacy-luw", "sudachi", "none", None],
     )
     parser.add_argument(
-        "--subword_tokenizer_type", choices=["wordpiece", "sentencepiece", None]
+        "--subword_tokenizer_type",
+        choices=["wordpiece", "sentencepiece", None],
+        help="Subword tokenizer type",
     )
     parser.add_argument("--tokenizer_class")
     parser.add_argument("--do_lower_case", action="store_true")
-    parser.add_argument("--ignore_max_byte_error", action="store_true")
-    parser.add_argument("--mecab_dic")
-    parser.add_argument("--mecab_option")
-    parser.add_argument("--sudachi_split_mode")
-    parser.add_argument("--sudachi_config_path")
-    parser.add_argument("--sudachi_resource_dir")
-    parser.add_argument("--sudachi_dict_type", default="core")
-    parser.add_argument("--sp_model_kwargs")
+    parser.add_argument(
+        "--ignore_max_byte_error",
+        action="store_true",
+        help="This option enalbes to skip examples which would cause max byte error "
+        "(for Juman++ and Sudachi)."
+        "Please see get_word_tokenizer document of jptranstokenizer library.",
+    )
+    parser.add_argument(
+        "--mecab_dic",
+        type=str,
+        default="",
+        choices=["", "unidic_lite", "unidic", "ipadic"],
+        help="MeCab dict type. "
+        "It must be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--mecab_option",
+        type=str,
+        default="",
+        help="It may be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_split_mode",
+        default="",
+        choices=["A", "B", "C", ""],
+        help="It must be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_config_path",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_resource_dir",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_dict_type",
+        default="core",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "If not specified, it uses jptranstokenizer's default value (core)."
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument("--sp_model_kwargs", help="(For sentencepiece)")
     parser.add_argument("--unk_token", default="[UNK]")
     parser.add_argument("--sep_token", default="[SEP]")
     parser.add_argument("--pad_token", default="[PAD]")
@@ -147,9 +189,10 @@ def assert_arguments_for_tokenizer(args: argparse.Namespace) -> None:
     ), "Argument tokenizer_name_or_path must be specified"
     if args.language == "ja":
         if not args.load_from_hub:
-            assert (
-                args.word_tokenizer_type is not None
-            ), "Argument word_tokenizer must be explicitly specified (basic, mecab, juman, spacy-luw, sudachi, none)"
+            assert args.word_tokenizer_type is not None, (
+                "Argument word_tokenizer must be explicitly specified "
+                "(basic, mecab, juman, spacy-luw, sudachi, none)"
+            )
             assert (
                 args.subword_tokenizer_type is not None
             ), "Argument subword_tokenizer must be specified (wordpiece, sentencepiece)"
@@ -158,7 +201,8 @@ def assert_arguments_for_tokenizer(args: argparse.Namespace) -> None:
             pass
         else:
             logger.error(
-                "the mode of language: en and loading local tokenizer is not implemented now"
+                "the mode of language: en and loading local tokenizer is not "
+                "implemented now"
             )
             raise NotImplementedError()
     else:
