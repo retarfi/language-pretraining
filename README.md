@@ -82,13 +82,12 @@ $ python train_tokenizer.py \
 --input_file corpus.txt \
 --model_dir tokenizer/ \
 --intermediate_dir ./data/corpus_split/ \
---mecab_dic_type ipadic \
+--mecab_dic ipadic \
 --tokenizer_type wordpiece \
 --vocab_size 32768 \
 --min_frequency 2 \
 --limit_alphabet 2900 \
---num_unused_tokens 10 \
---mecab_dic_type ipadic
+--num_unused_tokens 10
 ```
 
 You can see all the arguments with `python train_tokenizer.py --help`
@@ -189,7 +188,7 @@ $ python run_pretraining.py \
 --tokenizer_name_or_path tokenizer/vocab.txt \
 --word_tokenizer_type mecab \
 --subword_tokenizer_type wordpiece \
---mecab_dic_type ipadic \
+--mecab_dic ipadic \
 (--use_deepspeed \)
 (--do_whole_word_mask \)
 (--do_continue)
@@ -205,7 +204,7 @@ $ NCCL_SOCKET_IFNAME=eno1 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.l
 --tokenizer_name_or_path tokenizer/vocab.txt \
 --word_tokenizer_type mecab \
 --subword_tokenizer_type wordpiece \
---mecab_dic_type ipadic \
+--mecab_dic ipadic \
 (--use_deepspeed \)
 (--do_whole_word_mask \)
 (--do_continue)
