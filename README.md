@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/retarfi/language-pretraining#licenses">
-    <img alt="GitHub" src="https://img.shields.io/badge/license-Apache--2.0-brightgreen">
+    <img alt="GitHub" src="https://img.shields.io/badge/license-MIT-brightgreen">
   </a>
   <a href="https://github.com/retarfi/language-pretraining/releases">
     <img alt="GitHub release" src="https://img.shields.io/github/v/release/retarfi/language-pretraining.svg">
@@ -12,7 +12,9 @@
 </p>
 
 This is a repository of pretrained Japapanese transformer-based models.
-The models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab).
+BERT, ELECTRA, RoBERTa, DeBERTa, and DeBERTaV2 is available.
+
+Our pre-trained models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab).
 BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base models trained by Wikipedia or financial dataset is available in this URL.
 
 **issue は日本語でも大丈夫です。**
@@ -69,7 +71,9 @@ BERT-small, BERT-base, ELECTRA-small, ELECTRA-small-paper, and ELECTRA-base mode
 ### Train Tokenizer
 
 In our pretrained models, the texts are first tokenized by [MeCab](https://taku910.github.io/mecab/) with [IPAdic](https://pypi.org/project/ipadic/) dictionary and then split into subwords by the WordPiece algorithm.
-From v3.0.0, [jptranstokenizer](https://github.com/retarfi/jptranstokenizer) is required, which enables to use word tokenizers other than MeCab, such as Juman++, Sudachi, and spaCy LUW.
+
+From v2.2.0, [jptranstokenizer](https://github.com/retarfi/jptranstokenizer) is required, which enables to use word tokenizers other than MeCab, such as Juman++, Sudachi, and spaCy LUW.
+
 For subword tokenization, [SentencePiece](https://github.com/google/sentencepiece) is also available for subword algorithm.
 
 ```
@@ -94,7 +98,8 @@ You can see all the arguments with `python train_tokenizer.py --help`
 You can train any type of corpus in Japanese.  
 When you train with another dataset, please add your corpus name with the line.  
 The output directory name is `<dataset_type>_<max_length>_<input_corpus>`.  
-In the following case, the output directory name is `nsp_128_wiki-ja`.
+In the following case, the output directory name is `nsp_128_wiki-ja`.  
+``tokenizer_name_or_path`` will end with vocab.txt for wordpiece and with spiece.model for sentencepiece.
 
 We show 3 examples to create dataset.
 
@@ -316,16 +321,12 @@ See the [open issues](https://github.com/retarfi/language-pretraining/issues) fo
 
 ## Citation
 
-### Pre-trained Model
-
-**There will be another paper for this pretrained model.
-Be sure to check here again when you cite.**
 
 ```
-@inproceedings{Suzuki-etal-2023-ipm,
+@article{Suzuki-etal-2023-ipm,
   title = {Constructing and analyzing domain-specific language model for financial text mining}
   author = {Masahiro Suzuki and Hiroki Sakaji and Masanori Hirano and Kiyoshi Izumi},
-  journal = {Information Processing & Management},
+  journal = {Information Processing \& Management},
   volume = {60},
   number = {2},
   pages = {103194},
@@ -334,18 +335,6 @@ Be sure to check here again when you cite.**
 }
 ```
 
-### This Implementation
-
-```
-@misc{Suzuki-2021-github,
-  author = {Masahiro Suzuki},
-  title = {BERT and ELECTRA Models for Japanese},
-  year = {2021},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/retarfi/language-pretraining}}
-}
-```
 
 ## Licenses
 
