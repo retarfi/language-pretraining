@@ -5,7 +5,7 @@ import logging
 import os
 import warnings
 from fractions import Fraction
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import datasets
 import psutil
@@ -250,7 +250,7 @@ def run_pretraining(
             },
             "zero_optimization": {
                 "stage": 2,
-                "offload_optimizer": {"device": "cpu", "pin_memory": True},
+                # "offload_optimizer": {"device": "cpu", "pin_memory": True},
                 "allgather_partitions": True,
                 "allgather_bucket_size": deepspeed_bucket_size,
                 "overlap_comm": True,
