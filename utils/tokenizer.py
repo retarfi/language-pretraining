@@ -1,80 +1,209 @@
+import argparse
 import os
+from typing import Optional, Union
 
-from tokenizers import SentencePieceBPETokenizer, normalizers
-from tokenizers.processors import BertProcessing
-import transformers
 from transformers import (
     AutoTokenizer,
-    BertJapaneseTokenizer,
     PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
-    logging
+    logging,
 )
+from jptranstokenizer import JapaneseTransformerTokenizer
+
 
 logging.set_verbosity_info()
 logging.enable_explicit_format()
 logger = logging.get_logger()
 
 
-def load_tokenizer(
-    tokenizer_name_or_path:str,
-    tokenizer_type:str,
-    mecab_dic_type:str
-) -> PreTrainedTokenizerBase:
-
-    if os.path.isfile(tokenizer_name_or_path+ "vocab.txt"):
-        tokenizer_name_or_path = os.path.join(tokenizer_name_or_path, "vocab.txt")
-    if os.path.isdir(tokenizer_name_or_path) or os.path.isfile(tokenizer_name_or_path):
-        # load from local file
-        if tokenizer_type=="sentencepiece":
-            if os.path.isdir(tokenizer_name_or_path):
-                tokenizer_dir = tokenizer_name_or_path
+def load_tokenizer(args: argparse.Namespace) -> PreTrainedTokenizerBase:
+    def _load_tokenizer(
+        language: str,
+        tokenizer_name_or_path: Union[str, os.PathLike],
+        load_from_hub: bool,
+        word_tokenizer_type: Optional[str],
+        subword_tokenizer_type: Optional[str],
+        tokenizer_class: Optional[str],
+        do_lower_case: bool,
+        ignore_max_byte_error: bool,
+        mecab_dic: Optional[str],
+        mecab_option: Optional[str],
+        sudachi_split_mode: Optional[str],
+        sudachi_config_path: Optional[str],
+        sudachi_resource_dir: Optional[str],
+        sudachi_dict_type: Optional[str],
+        sp_model_kwargs: Optional[str],
+        unk_token: str,
+        sep_token: str,
+        pad_token: str,
+        cls_token: str,
+        mask_token: str,
+    ) -> PreTrainedTokenizerBase:
+        if language == "ja":
+            if load_from_hub:
+                return JapaneseTransformerTokenizer.from_pretrained(
+                    tokenizer_name_or_path=tokenizer_name_or_path,
+                    word_tokenizer_type=word_tokenizer_type,
+                    tokenizer_class=tokenizer_class,
+                    do_lower_case=do_lower_case,
+                    ignore_max_byte_error=ignore_max_byte_error,
+                    mecab_dic=mecab_dic,
+                    mecab_option=mecab_option,
+                    sudachi_split_mode=sudachi_split_mode,
+                    sudachi_config_path=sudachi_config_path,
+                    sudachi_resource_dir=sudachi_resource_dir,
+                    sudachi_dict_type=sudachi_dict_type,
+                    sp_model_kwargs=sp_model_kwargs,
+                )
             else:
-                tokenizer_dir = os.path.dirname(tokenizer_name_or_path)
-            tokenizer = SentencePieceBPETokenizer(
-                os.path.join(tokenizer_dir, "vocab.json"),
-                os.path.join(tokenizer_dir, "merges.txt"),
-                unk_token="[UNK]",
-                add_prefix_space=False, # 文頭に自動でスペースを追加しない
-            )
-            # 改行がinput_fileにあるとtokenも改行がついてくるのでstrip
-            # cf. https://github.com/huggingface/tokenizers/issues/231
-            tokenizer.normalizer = normalizers.Sequence([
-                normalizers.Strip(),
-                normalizers.NFKC()
-            ])
-            # post process tokenizer
-            tokenizer._tokenizer.post_processor = BertProcessing(
-                ("[SEP]", tokenizer.token_to_id("[SEP]")),
-                ("[CLS]", tokenizer.token_to_id("[CLS]")),
-            )
-            # tokenizer.enable_truncation(max_length = MAX_LENGTH)
-            # convert to transformers style
-            tokenizer = PreTrainedTokenizerFast(
-                tokenizer_object = tokenizer,
-                # model_max_length = MAX_LENGTH,
-                unk_token = "[UNK]",
-                sep_token = "[SEP]",
-                pad_token = "[PAD]",
-                cls_token = "[CLS]",
-                mask_token = "[MASK]",
-            )
-        elif tokenizer_type=="wordpiece":
-            # currently supports only japanese
-            if os.path.isdir(tokenizer_name_or_path):
-                tokenizer_name_or_path = os.path.join(tokenizer_name_or_path, "vocab.txt")
-            tokenizer = BertJapaneseTokenizer(
-                tokenizer_name_or_path,
-                do_lower_case = False,
-                word_tokenizer_type = "mecab",
-                subword_tokenizer_type = "wordpiece",
-                tokenize_chinese_chars = False,
-                mecab_kwargs = {"mecab_dic": mecab_dic_type},
-                # model_max_length = MAX_LENGTH
-            )
+                return JapaneseTransformerTokenizer(
+                    vocab_file=tokenizer_name_or_path,
+                    word_tokenizer_type=word_tokenizer_type,
+                    subword_tokenizer_type=subword_tokenizer_type,
+                    do_lower_case=do_lower_case,
+                    ignore_max_byte_error=ignore_max_byte_error,
+                    unk_token=unk_token,
+                    sep_token=sep_token,
+                    pad_token=pad_token,
+                    cls_token=cls_token,
+                    mask_token=mask_token,
+                    mecab_dic=mecab_dic,
+                    mecab_option=mecab_option,
+                    sudachi_split_mode=sudachi_split_mode,
+                    sudachi_config_path=sudachi_config_path,
+                    sudachi_resource_dir=sudachi_resource_dir,
+                    sudachi_dict_type=sudachi_resource_dir,
+                    sp_model_kwargs=sp_model_kwargs,
+                )
+        elif language == "en":
+            if load_from_hub:
+                return AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+            else:
+                # TODO: Add implementation for english local tokenizer
+                raise NotImplementedError()
         else:
-            raise ValueError(f"Invalid tokenizer_type {tokenizer_type}.")
+            raise ValueError("language must be ja or en")
+
+    return _load_tokenizer(
+        language=args.language,
+        tokenizer_name_or_path=args.tokenizer_name_or_path,
+        load_from_hub=args.load_from_hub,
+        word_tokenizer_type=args.word_tokenizer_type,
+        subword_tokenizer_type=args.subword_tokenizer_type,
+        tokenizer_class=args.tokenizer_class,
+        do_lower_case=args.do_lower_case,
+        ignore_max_byte_error=args.ignore_max_byte_error,
+        mecab_dic=args.mecab_dic,
+        mecab_option=args.mecab_option,
+        sudachi_split_mode=args.sudachi_split_mode,
+        sudachi_config_path=args.sudachi_config_path,
+        sudachi_resource_dir=args.sudachi_resource_dir,
+        sudachi_dict_type=args.sudachi_dict_type,
+        sp_model_kwargs=args.sp_model_kwargs,
+        unk_token=args.unk_token,
+        sep_token=args.sep_token,
+        pad_token=args.pad_token,
+        cls_token=args.cls_token,
+        mask_token=args.mask_token,
+    )
+
+
+def add_arguments_for_tokenizer(parser: argparse.Namespace) -> None:
+    parser.add_argument(
+        "--tokenizer_name_or_path",
+        type=str,
+        required=True,
+        help="uploaded name in HuggingFace Hub or path to model or vocab file",
+    )
+    parser.add_argument("--language", default="ja", choices=["ja", "en"])
+    parser.add_argument("--load_from_hub", action="store_true")
+    parser.add_argument(
+        "--word_tokenizer_type",
+        choices=["basic", "mecab", "juman", "spacy-luw", "sudachi", "none", None],
+    )
+    parser.add_argument(
+        "--subword_tokenizer_type",
+        choices=["wordpiece", "sentencepiece", None],
+        help="Subword tokenizer type",
+    )
+    parser.add_argument("--tokenizer_class")
+    parser.add_argument("--do_lower_case", action="store_true")
+    parser.add_argument(
+        "--ignore_max_byte_error",
+        action="store_true",
+        help="This option enalbes to skip examples which would cause max byte error "
+        "(for Juman++ and Sudachi)."
+        "Please see get_word_tokenizer document of jptranstokenizer library.",
+    )
+    parser.add_argument(
+        "--mecab_dic",
+        type=str,
+        default="",
+        choices=["", "unidic_lite", "unidic", "ipadic"],
+        help="MeCab dict type. "
+        "It must be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--mecab_option",
+        type=str,
+        default="",
+        help="It may be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_split_mode",
+        default="",
+        choices=["A", "B", "C", ""],
+        help="It must be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_config_path",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_resource_dir",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_dict_type",
+        default="core",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "If not specified, it uses jptranstokenizer's default value (core)."
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument("--sp_model_kwargs", help="(For sentencepiece)")
+    parser.add_argument("--unk_token", default="[UNK]")
+    parser.add_argument("--sep_token", default="[SEP]")
+    parser.add_argument("--pad_token", default="[PAD]")
+    parser.add_argument("--cls_token", default="[CLS]")
+    parser.add_argument("--mask_token", default="[MASK]")
+
+
+def assert_arguments_for_tokenizer(args: argparse.Namespace) -> None:
+    # confirm validation of arguments with load_tokenizer()
+    assert (
+        args.tokenizer_name_or_path != ""
+    ), "Argument tokenizer_name_or_path must be specified"
+    if args.language == "ja":
+        if not args.load_from_hub:
+            assert args.word_tokenizer_type is not None, (
+                "Argument word_tokenizer must be explicitly specified "
+                "(basic, mecab, juman, spacy-luw, sudachi, none)"
+            )
+            assert (
+                args.subword_tokenizer_type is not None
+            ), "Argument subword_tokenizer must be specified (wordpiece, sentencepiece)"
+    elif args.language == "en":
+        if args.load_from_hub:
+            pass
+        else:
+            logger.error(
+                "the mode of language: en and loading local tokenizer is not "
+                "implemented now"
+            )
+            raise NotImplementedError()
     else:
-        # load from HuggingFace Hub
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
-    return tokenizer
+        raise ValueError('Argument language must be "ja" or "en')

@@ -11,7 +11,9 @@
             "-1" : 128
         },
         "train-steps" : 1450000,
-        "save-steps" : 100000
+        "save-steps" : 100000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "bert-base" : {
         "number-of-layers" : 12,
@@ -24,7 +26,9 @@
         "batch-size" : {
             "-1" : 256
         },
-        "train-steps" : 1000000
+        "train-steps" : 1000000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "bert-large" : {
         "number-of-layers" : 24,
@@ -37,7 +41,9 @@
         "batch-size" : {
             "-1" : 256
         },
-        "train-steps" : 464000
+        "train-steps" : 464000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "electra-small-paper" : {
         "number-of-layers" : 12,
@@ -54,7 +60,9 @@
             "-1" : 128
         },
         "train-steps" : 1000000,
-        "save-steps" : 100000
+        "save-steps" : 100000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "electra-small" : {
         "number-of-layers" : 12,
@@ -71,7 +79,9 @@
             "-1" : 128
         },
         "train-steps" : 1000000,
-        "save-steps" : 100000
+        "save-steps" : 100000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "electra-base" : {
         "number-of-layers" : 12,
@@ -87,7 +97,9 @@
         "batch-size" : {
             "-1" : 256
         },
-        "train-steps" : 766000
+        "train-steps" : 766000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "electra-large" : {
         "number-of-layers" : 24,
@@ -103,7 +115,60 @@
         "batch-size" : {
             "-1" : 2048
         },
-        "train-steps" : 400000
+        "train-steps" : 400000,
+        "fp16-type": 0,
+        "bf16": false
+    },
+    "roberta-base" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 3072,
+        "attention-heads" : 12,
+        "warmup-steps" : 24000,
+        "learning-rate" : 6e-4,
+        "batch-size" : {
+            "-1" : 8000
+        },
+        "train-steps" : 500000,
+        "save-steps" : 50000,
+        "logging-steps" : 5000,
+        "fp16-type": 0,
+        "bf16": false
+    },
+    "roberta-large" : {
+        "number-of-layers" : 24,
+        "hidden-size" : 1024,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 4096,
+        "attention-heads" : 16,
+        "warmup-steps" : 30000,
+        "learning-rate" : 4e-4,
+        "batch-size" : {
+            "-1" : 8000
+        },
+        "train-steps" : 500000,
+        "save-steps" : 50000,
+        "logging-steps" : 5000,
+        "fp16-type": 0,
+        "bf16": false
+    },
+    "deberta-base" : {
+        "number-of-layers" : 12,
+        "hidden-size" : 768,
+        "sequence-length" : 512,
+        "ffn-inner-hidden-size" : 3072,
+        "attention-heads" : 12,
+        "warmup-steps" : 10000,
+        "learning-rate" : 2e-4,
+        "batch-size" : {
+            "-1" : 2000
+        },
+        "train-steps" : 1000000,
+        "save-steps" : 10000,
+        "logging-steps" : 5000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "bert-base-dist" : {
         "number-of-layers" : 12,
@@ -121,7 +186,9 @@
         },
         "train-steps" : 1000000,
         "save-steps" : 50000,
-        "logging-steps" : 5000
+        "logging-steps" : 5000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "bert-small-additional" : {
         "pretrained_model_name_or_path" : "izumi-lab/bert-small-japanese",
@@ -132,7 +199,9 @@
             "-1" : 128
         },
         "train-steps" : 1450000,
-        "save-steps" : 100000
+        "save-steps" : 100000,
+        "fp16-type": 0,
+        "bf16": false
     },
     "electra-small-additional" : {
         "pretrained_generator_model_name_or_path" : "izumi-lab/electra-small-paper-japanese-generator",
@@ -144,6 +213,8 @@
             "-1" : 128
         },
         "train-steps" : 1000000,
-        "save-steps" : 100000
+        "save-steps" : 100000,
+        "fp16-type": 0,
+        "bf16": false
     }
 }

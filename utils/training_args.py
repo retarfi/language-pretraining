@@ -26,7 +26,7 @@ def _setup_devices(self) -> "torch.device":
         # deepspeed  ./program.py
         # rather than:
         # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
-        from .deepspeed import is_deepspeed_available
+        from transformers.deepspeed import is_deepspeed_available
 
         if not is_deepspeed_available():
             raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
