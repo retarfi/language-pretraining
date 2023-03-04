@@ -176,7 +176,7 @@ def make_dataset(
                     [(example if isinstance(example, dict) else example.data)]
                 ),
                 tokenizer=tokenizer,
-                max_length=max_length
+                max_length=max_length,
             )
         )
 
@@ -418,10 +418,8 @@ if __name__ == "__main__":
         "--input_corpus",
         type=str,
         required=True,
-        help=(
-            "Directory name for created dataset. "
-            "Other affixes are also added to this."
-        ),
+        help="Directory name for created dataset. "
+        "Other affixes are also added to this.",
     )
     parser.add_argument("--max_length", type=int, required=True)
 
@@ -431,12 +429,10 @@ if __name__ == "__main__":
         type=str,
         default="",
         choices=["linebyline", "nsp", ""],
-        help=(
-            "This must be specified when --mask_style is none. "
-            "Overwritten when --mask_sytle is other than none"
-        ),
+        help="This must be specified when --mask_style is none. "
+        "Overwritten when --mask_sytle is other than none",
     )
-    parser.add_argument("--input_file", type=str, default="")
+    parser.add_argument("--input_file", type=str, help="Input text file")
     lst_mask_style: List[str] = ["none"] + list(
         map(
             lambda x: "".join(x),
@@ -448,12 +444,10 @@ if __name__ == "__main__":
         type=str,
         default="none",
         choices=lst_mask_style,
-        help=(
-            "If none (default), no masking. "
-            "If other choice, masking is applied. "
-            "-wwm means applying whole-word-masking. "
-            "Masking for bert is not available (only dynamic masking is avialable)"
-        ),
+        help="If none (default), no masking. "
+        "If other choice, masking is applied. "
+        "-wwm means applying whole-word-masking. "
+        "Masking for bert is not available (only dynamic masking is avialable)",
     )
     parser.add_argument(
         "--mlm_probability",
