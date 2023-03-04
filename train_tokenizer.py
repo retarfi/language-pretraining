@@ -268,7 +268,9 @@ def train_tokenizer(
 
 if __name__ == "__main__":
     # arguments
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--word_tokenizer",
         required=True,
@@ -279,61 +281,112 @@ if __name__ == "__main__":
         "--input_file",
         required=True,
         type=str,
-        help="In the text file, new line is inserted between two sentences. (For NSP) break line is inserted between two paragraphs.",
+        help="In the text file, new line must be inserted between two sentences. "
+        "(For NSP) break line is inserted between two paragraphs.",
     )
-    parser.add_argument("--model_dir", required=True, type=str)
+    parser.add_argument(
+        "--model_dir",
+        required=True,
+        type=str,
+        help="Directory for trained tokenizer model.",
+    )
     parser.add_argument("--language", type=str, default="ja", choices=["ja", "en"])
     # parallel option
-    parser.add_argument("--intermediate_dir", type=str, default="tmp")
+    parser.add_argument(
+        "--intermediate_dir",
+        type=str,
+        default="tmp",
+        help="Temporary directory for unpretokenized splitted texts.",
+    )
     parser.add_argument(
         "--num_files",
         type=int,
         default=1,
-        help="Number of split files. It enables multiprocessing. Using multiprocessing with spacy-luw will not work.",
+        help="Number of split files. It enables multiprocessing. "
+        "Using multiprocessing with spacy-luw will not work.",
     )
     # pre-tokenize(mainword) option
-    parser.add_argument("--pretokenized_prefix", type=str, default="_pretokenized")
+    parser.add_argument(
+        "--pretokenized_prefix",
+        type=str,
+        default="_pretokenized",
+        help="Prefix of the directory of pretokenized texts",
+    )
     # subword training option
     parser.add_argument(
         "--tokenizer_type",
         required=True,
         type=str,
         choices=["sentencepiece", "wordpiece"],
+        help="Subword tokenizer type",
     )
-    parser.add_argument("--spm_split_by_whitespace", action="store_true")
-    parser.add_argument("--vocab_size", type=int, default=32768)
+    parser.add_argument(
+        "--spm_split_by_whitespace",
+        action="store_true",
+        help="If enabled, (only for sentencepiece) ",
+    )
+    parser.add_argument(
+        "--vocab_size", type=int, default=32768, help="The number of vocabulary."
+    )
     parser.add_argument("--min_frequency", type=int, default=2, help="only wordpiece")
     parser.add_argument(
         "--limit_alphabet", type=int, default=2900, help="only wordpiece"
     )
-    parser.add_argument("--num_unused_tokens", type=int, default=10)
+    parser.add_argument(
+        "--num_unused_tokens",
+        type=int,
+        default=10,
+        help="The number of vocabulary of unused tokens such as <unused0>.",
+    )
     # mecab option
     parser.add_argument(
         "--mecab_dic_type",
         type=str,
         default="",
         choices=["", "unidic_lite", "unidic", "ipadic"],
-        help="From jptranstokenizer library",
+        help="MeCab dict type. "
+        "It must be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
     )
     parser.add_argument(
-        "--mecab_option", type=str, default="", help="From jptranstokenizer library"
+        "--mecab_option",
+        type=str,
+        default="",
+        help="It may be specified when using MeCab for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
     )
     # sudachi option
     parser.add_argument(
         "--sudachi_split_mode",
         default="",
         choices=["A", "B", "C", ""],
-        help="From jptranstokenizer library",
+        help="It must be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
     )
-    parser.add_argument("--sudachi_config_path", help="From jptranstokenizer library")
-    parser.add_argument("--sudachi_resource_dir", help="From jptranstokenizer library")
-    parser.add_argument("--sudachi_dict_type", help="From jptranstokenizer library")
+    parser.add_argument(
+        "--sudachi_config_path",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_resource_dir",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "For detail, please see jptranstokenizer's document.",
+    )
+    parser.add_argument(
+        "--sudachi_dict_type",
+        help="It may be specified when using Sudachi for word tokenizer. "
+        "If not specified, it uses jptranstokenizer's default value (core)."
+        "For detail, please see jptranstokenizer's document.",
+    )
     # other option
     parser.add_argument("--disable_tqdm", action="store_true")
     parser.add_argument(
         "--ignore_max_byte_error",
         action="store_true",
-        help="Please see get_word_tokenizer document of jptranstokenizer library.",
+        help="This option enalbes to skip examples which would cause max byte error "
+        "(for Juman++ and Sudachi)."
+        "Please see get_word_tokenizer document of jptranstokenizer library.",
     )
     args = parser.parse_args()
 
