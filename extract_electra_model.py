@@ -11,13 +11,11 @@ from transformers import ElectraConfig
 transformers.logging.set_verbosity_info()
 transformers.logging.enable_explicit_format()
 
-import utils
+from models import ElectraForPretrainingModel
 
 
 warnings.simplefilter("ignore", UserWarning)
-assert transformers.__version__ in [
-    "4.7.0"
-], f"This file is only guranteed with transformers 4.7.0, but this is {transformers.__version__}"
+transformers.utils.check_min_version("4.10.2")
 
 
 def main(
@@ -49,9 +47,9 @@ def main(
             "For generator, pretrained_generator_model_name_or_path or <generator-size, embedding-size, hidden-size, attention-heads, number-of-layers, and ffn-inner-hidden-size> must be specified in json file"
         )
 
-    model = utils.ElectraForPretrainingModel.from_pretrained(
+    model = ElectraForPretrainingModel.from_pretrained_together(
         input_dir,
-        config=config_generator,
+        config_generator=config_generator,
         config_discriminator=config_discriminator,
     )
 
@@ -67,13 +65,21 @@ def main(
 
 if __name__ == "__main__":
     # arguments
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--input_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--parameter_file", type=str, required=True)
     parser.add_argument("--model_type", type=str, required=True)
-    parser.add_argument("--generator", action="store_true")
-    parser.add_argument("--discriminator", action="store_true")
+    parser.add_argument(
+        "--generator", action="store_true", help="Extract generator model if enabled"
+    )
+    parser.add_argument(
+        "--discriminator",
+        action="store_true",
+        help="Extract discriminator model if enabled",
+    )
 
     args = parser.parse_args()
 

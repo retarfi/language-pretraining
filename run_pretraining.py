@@ -26,7 +26,7 @@ transformers.logging.enable_explicit_format()
 import utils
 from utils.logger import make_logger_setting
 from utils.trainer import TRAINER_STATE_NAME
-from models import DebertaEmdForPreTraining, DebertaV2EmdForPreTraining
+from models import DebertaEmdForPreTraining, DebertaV2EmdForPreTraining, ElectraForPretrainingModel
 
 
 # logger
@@ -141,7 +141,7 @@ def get_model_electra(
 ) -> PreTrainedModel:
 
     if load_pretrained:
-        model = utils.ElectraForPretrainingModel.from_pretrained(
+        model = ElectraForPretrainingModel.from_pretrained_separetely(
             param_config["pretrained_generator_model_name_or_path"],
             param_config["pretrained_discriminator_model_name_or_path"],
         )
@@ -177,7 +177,7 @@ def get_model_electra(
             intermediate_size=param_config["ffn-inner-hidden-size"],
             max_position_embeddings=param_config["sequence-length"],
         )
-        model = utils.ElectraForPretrainingModel(
+        model = ElectraForPretrainingModel(
             config_generator=config_generator,
             config_discriminator=config_discriminator,
         )

@@ -1,2 +1,3 @@
 from .deberta import DebertaEmdForPreTraining
 from .debertav2 import DebertaV2EmdForPreTraining
+from .electra import ElectraForPretrainingModel
