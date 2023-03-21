@@ -1,5 +1,4 @@
 from .data_collator import get_mask_datacollator
-from .model import ElectraForPretrainingModel
 from .tokenizer import (
     add_arguments_for_tokenizer,
     assert_arguments_for_tokenizer,
