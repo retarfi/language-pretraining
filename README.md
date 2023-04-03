@@ -11,7 +11,7 @@
   </a>
 </p>
 
-This is a repository of pretrained Japapanese transformer-based models.
+This is a repository of pretrained Japanese transformer-based models.
 BERT, ELECTRA, RoBERTa, DeBERTa, and DeBERTaV2 is available.
 
 Our pre-trained models are available in Transformers by Hugging Face: [https://huggingface.co/izumi-lab](https://huggingface.co/izumi-lab).
@@ -100,7 +100,7 @@ The output directory name is `<dataset_type>_<max_length>_<input_corpus>`.
 In the following case, the output directory name is `nsp_128_wiki-ja`.  
 ``tokenizer_name_or_path`` will end with vocab.txt for wordpiece and with spiece.model for sentencepiece.
 
-We show 3 examples to create dataset.
+We show 2 examples to create dataset.
 
 - When you use your trained tokenizer:
 
