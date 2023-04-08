@@ -110,12 +110,12 @@ def make_dataset(
         remove_columns=["sentence"],
         batched=False,
         load_from_cache_file=False,
-    ).flatten_indices()
+    )
     ds = ds.filter(
         lambda example: len(example["tokens"]) > 0
         and not (len(example["tokens"]) == 1 and len(example["tokens"][0]) == 0),
         # num_proc=None,
-    ).flatten_indices()
+    )
     logger.info("Tokenize finished")
 
     # create_examples_from_document
