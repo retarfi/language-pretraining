@@ -575,7 +575,7 @@ class MyTrainer(Trainer):
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
-                ))) or (self.deepspeed and self.deepspeed.tput_timer.total_step_count % args.gradient_accumulation_steps == 0):
+                ))) or (self.deepspeed and self.deepspeed.tput_timer.global_step_count % args.gradient_accumulation_steps == 0):
                 # if (step + 1) % args.gradient_accumulation_steps == 0 or (
                 #     # last step in epoch but step is always smaller than gradient_accumulation_steps
                 #     steps_in_epoch <= args.gradient_accumulation_steps
