@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+from fractions import Fraction
 from typing import Optional, Tuple, Union
 
 import torch
@@ -8,6 +9,8 @@ from transformers import (
     ElectraForMaskedLM,
     ElectraForPreTraining,
     ElectraPreTrainedModel,
+    PreTrainedModel,
+    PreTrainedTokenizerBase,
 )
 from transformers.file_utils import ModelOutput
 
@@ -198,3 +201,53 @@ class ElectraForPretrainingModel(ElectraPreTrainedModel):
         model.load_state_dict(torch.load(os.path.join(input_dir, "pytorch_model.bin")))
         model.weight_share()
         return model
+
+
+def get_model_electra(
+    tokenizer: PreTrainedTokenizerBase,
+    load_pretrained: bool,
+    param_config: dict,
+) -> PreTrainedModel:
+
+    if load_pretrained:
+        model = ElectraForPretrainingModel.from_pretrained_separetely(
+            param_config["pretrained_generator_model_name_or_path"],
+            param_config["pretrained_discriminator_model_name_or_path"],
+        )
+        flozen_layers = param_config["flozen-layers"]
+        if flozen_layers > -1:
+            for m in [model.generator, model.discriminator]:
+                for name, param in m.electra.embeddings.named_parameters():
+                    param.requires_grad = False
+                for i in range(flozen_layers):
+                    for name, param in m.electra.encoder.layer[i].named_parameters():
+                        param.requires_grad = False
+    else:
+        frac_generator = Fraction(param_config["generator-size"])
+        config_generator = ElectraConfig(
+            pad_token_id=tokenizer.pad_token_id,
+            vocab_size=tokenizer.vocab_size,
+            embedding_size=param_config["embedding-size"],
+            hidden_size=int(param_config["hidden-size"] * frac_generator),
+            num_attention_heads=int(param_config["attention-heads"] * frac_generator),
+            num_hidden_layers=param_config["number-of-layers"],
+            intermediate_size=int(
+                param_config["ffn-inner-hidden-size"] * frac_generator
+            ),
+            max_position_embeddings=param_config["sequence-length"],
+        )
+        config_discriminator = ElectraConfig(
+            pad_token_id=tokenizer.pad_token_id,
+            vocab_size=tokenizer.vocab_size,
+            embedding_size=param_config["embedding-size"],
+            hidden_size=param_config["hidden-size"],
+            num_attention_heads=param_config["attention-heads"],
+            num_hidden_layers=param_config["number-of-layers"],
+            intermediate_size=param_config["ffn-inner-hidden-size"],
+            max_position_embeddings=param_config["sequence-length"],
+        )
+        model = ElectraForPretrainingModel(
+            config_generator=config_generator,
+            config_discriminator=config_discriminator,
+        )
+    return model

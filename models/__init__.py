@@ -1,3 +1,4 @@
 from .deberta import DebertaEmdForPreTraining
 from .debertav2 import DebertaV2EmdForPreTraining
-from .electra import ElectraForPretrainingModel
+from .debertav3 import DebertaV3ForPreTraining, get_model_debertav3
+from .electra import ElectraForPretrainingModel, get_model_electra

@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import warnings
-from fractions import Fraction
+
 from typing import Dict, Optional, Union
 
 import datasets
@@ -14,7 +14,6 @@ import transformers
 from transformers.models import auto
 from transformers.data.data_collator import DataCollatorMixin, DataCollatorWithPadding
 from transformers import (
-    ElectraConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     TrainingArguments,
@@ -26,7 +25,12 @@ transformers.logging.enable_explicit_format()
 import utils
 from utils.logger import make_logger_setting
 from utils.trainer import TRAINER_STATE_NAME
-from models import DebertaEmdForPreTraining, DebertaV2EmdForPreTraining, ElectraForPretrainingModel
+from models import (
+    DebertaEmdForPreTraining,
+    DebertaV2EmdForPreTraining,
+    get_model_electra,
+    get_model_debertav3,
+)
 
 
 # logger
@@ -52,6 +56,12 @@ def get_model(
     model: PreTrainedModel
     if model_name == "electra":
         model = get_model_electra(
+            tokenizer=tokenizer,
+            load_pretrained=load_pretrained,
+            param_config=param_config,
+        )
+    elif model_name == "debertav3":
+        model = get_model_debertav3(
             tokenizer=tokenizer,
             load_pretrained=load_pretrained,
             param_config=param_config,
@@ -131,56 +141,6 @@ def get_model(
                         )
             config = MappedConfig(**dct_kwargs)
             model = MappedModel(config=config)
-    return model
-
-
-def get_model_electra(
-    tokenizer: PreTrainedTokenizerBase,
-    load_pretrained: bool,
-    param_config: dict,
-) -> PreTrainedModel:
-
-    if load_pretrained:
-        model = ElectraForPretrainingModel.from_pretrained_separetely(
-            param_config["pretrained_generator_model_name_or_path"],
-            param_config["pretrained_discriminator_model_name_or_path"],
-        )
-        flozen_layers = param_config["flozen-layers"]
-        if flozen_layers > -1:
-            for m in [model.generator, model.discriminator]:
-                for name, param in m.electra.embeddings.named_parameters():
-                    param.requires_grad = False
-                for i in range(flozen_layers):
-                    for name, param in m.electra.encoder.layer[i].named_parameters():
-                        param.requires_grad = False
-    else:
-        frac_generator = Fraction(param_config["generator-size"])
-        config_generator = ElectraConfig(
-            pad_token_id=tokenizer.pad_token_id,
-            vocab_size=tokenizer.vocab_size,
-            embedding_size=param_config["embedding-size"],
-            hidden_size=int(param_config["hidden-size"] * frac_generator),
-            num_attention_heads=int(param_config["attention-heads"] * frac_generator),
-            num_hidden_layers=param_config["number-of-layers"],
-            intermediate_size=int(
-                param_config["ffn-inner-hidden-size"] * frac_generator
-            ),
-            max_position_embeddings=param_config["sequence-length"],
-        )
-        config_discriminator = ElectraConfig(
-            pad_token_id=tokenizer.pad_token_id,
-            vocab_size=tokenizer.vocab_size,
-            embedding_size=param_config["embedding-size"],
-            hidden_size=param_config["hidden-size"],
-            num_attention_heads=param_config["attention-heads"],
-            num_hidden_layers=param_config["number-of-layers"],
-            intermediate_size=param_config["ffn-inner-hidden-size"],
-            max_position_embeddings=param_config["sequence-length"],
-        )
-        model = ElectraForPretrainingModel(
-            config_generator=config_generator,
-            config_discriminator=config_discriminator,
-        )
     return model
 
 
@@ -344,7 +304,7 @@ def run_pretraining(
     logger.info(f"{model_name} model is loaded")
 
     # data collator
-    if model_name in ["bert", "roberta", "deberta", "debertav2"]:
+    if model_name in ["bert", "roberta", "deberta", "debertav2", "debertav3"]:
         mlm_probability = 0.15
     elif model_name == "electra":
         mlm_probability = param_config["mask-percent"] / 100
@@ -372,6 +332,7 @@ def run_pretraining(
     )
     trainer.batch_config = param_config["batch-size"]
     trainer.real_batch_size = sum(param_config["batch-size"].values())
+    trainer.is_debertav3 = (model_name == "debertav3")
 
     logger.info("Pretraining starts.")
     trainoutput = trainer.train(
@@ -390,6 +351,8 @@ def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
         model_name = "electra"
     elif "roberta-" in model_type.lower():
         model_name = "roberta"
+    elif "debertav3-" in model_type.lower():
+        model_name = "debertav3"
     elif "debertav2-" in model_type.lower():
         model_name = "debertav2"
     elif "deberta-" in model_type.lower():
@@ -397,7 +360,7 @@ def assert_config(param_config: dict, model_type: str, node_rank: int) -> bool:
     elif "bert-" in model_type.lower():
         model_name = "bert"
     else:
-        raise ValueError("Argument model_type must contain electra or bert")
+        raise ValueError("Argument model_type must contain bert, deberta, devertav2, debertav3, electra, or roberta")
     if (
         len(
             set(param_config.keys())
