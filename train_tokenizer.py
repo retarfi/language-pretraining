@@ -200,7 +200,9 @@ def train_tokenizer(
     num_unused_tokens: int,
     tokenizer_type: str,
     language: str,
+    spm_model_type: str = "unigram",
     spm_split_by_whitespace: bool = False,
+    spm_add_dummy_prefix: bool = True,
 ) -> None:
 
     if os.path.isfile(input_file_or_dir):
@@ -220,13 +222,13 @@ def train_tokenizer(
 
         spm.SentencePieceTrainer.Train(
             input=files,
-            model_type="unigram",
+            model_type=spm_model_type,
             split_by_whitespace=spm_split_by_whitespace,
-            # model_dir=output_dir,
+            add_dummy_prefix=spm_add_dummy_prefix,
             vocab_size=vocab_size,
             model_prefix=os.path.join(output_dir, "spiece"),
             character_coverage=0.9995,
-            num_threads=os.cpu_count(),
+            num_threads=min(os.cpu_count(), 128),
             train_extremely_large_corpus=True,
             pad_piece="[PAD]",
             unk_piece="[UNK]",
@@ -321,6 +323,13 @@ if __name__ == "__main__":
         help="Subword tokenizer type",
     )
     parser.add_argument(
+        "--spm_model_type",
+        type=str,
+        choices=["unigram", "bpe", "char"],
+        default="unigram",
+        help="Sntencepiece model type",
+    )
+    parser.add_argument(
         "--spm_split_by_whitespace",
         action="store_true",
         help="If enabled, (only for sentencepiece) ",
@@ -388,6 +397,11 @@ if __name__ == "__main__":
         "(for Juman++ and Sudachi)."
         "Please see get_word_tokenizer document of jptranstokenizer library.",
     )
+    parser.add_argument(
+        "--spm_disable_add_dummy_prefix",
+        action="store_true",
+        help="Disable adding dummy whitespace at the beginning of text (for sentencepiece)",
+    )
     args = parser.parse_args()
 
     # assertion
@@ -445,4 +459,5 @@ if __name__ == "__main__":
         tokenizer_type=args.tokenizer_type,
         language=args.language,
         spm_split_by_whitespace=args.spm_split_by_whitespace,
+        spm_add_dummy_prefix=not args.spm_disable_add_dummy_prefix,
     )
