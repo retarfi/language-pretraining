@@ -44,7 +44,7 @@ def test_pre_tokenize(
         pretokenized_prefix="_pretokenized",
         intermediate_dir=INTERMEDIATE_DIR,
         word_tokenizer=word_tokenizer,
-        mecab_dic_type="ipadic",
+        mecab_dic="ipadic",
         mecab_option="",
         sudachi_split_mode=sudachi_split_mode,
         sudachi_config_path=None,
