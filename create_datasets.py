@@ -501,10 +501,12 @@ def make_dataset(
     # save processed data
     if do_save:
         save_ds(
+            ds=ds,
             dataset_dir=dataset_dir,
             dataset_type=dataset_type,
             max_length=max_length,
             input_corpus=input_corpus,
+            mask_style=mask_style,
         )
     return ds
 
