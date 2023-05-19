@@ -77,6 +77,7 @@ def mp_tokenize(
     use_tqdm: bool = True,
     ignore_max_byte_error: bool = False,
     ignore_runtime_error: bool = False,
+    delimiter: str = " ",
 ) -> None:
     # ignore_runtime_error is option for spacy-luw
 
@@ -106,7 +107,7 @@ def mp_tokenize(
                 if ignore_runtime_error:
                     try:
                         outfile.write(
-                            " ".join(main_tokenizer.tokenize(line.strip())) + "\n"
+                            delimiter.join(main_tokenizer.tokenize(line.strip())) + "\n"
                         )
                     except RuntimeError:
                         pass
@@ -134,6 +135,7 @@ def pre_tokenize(
     sudachi_dict_type: str,
     use_tqdm: bool = True,
     ignore_max_byte_error: bool = False,
+    delimiter: str = " ",
 ) -> str:
     logger.info("Pre-tokenizing...")
     input_file_or_dir: str
@@ -155,6 +157,7 @@ def pre_tokenize(
             sudachi_dict_type=sudachi_dict_type,
             use_tqdm=use_tqdm,
             ignore_max_byte_error=ignore_max_byte_error,
+            delimiter=delimiter,
         )
         logger.info(f"Pre-tokenized files are saved in {str(pretokenized_plib_file)}")
         input_file_or_dir = str(pretokenized_plib_file)
@@ -181,6 +184,7 @@ def pre_tokenize(
                         sudachi_dict_type,
                         use_tqdm,
                         ignore_max_byte_error,
+                        delimiter,
                     ),
                 )
                 for i in range(num_files)
@@ -203,6 +207,7 @@ def train_tokenizer(
     spm_model_type: str = "unigram",
     spm_split_by_whitespace: bool = False,
     spm_add_dummy_prefix: bool = True,
+    spm_delimiter: str = " ",
 ) -> None:
 
     if os.path.isfile(input_file_or_dir):
@@ -240,6 +245,7 @@ def train_tokenizer(
             eos_id=3,
             control_symbols=["[MASK]"],
             user_defined_symbols=",".join(special_tokens),
+            pretokenization_delimiter="" if spm_delimiter == " " else spm_delimiter,
         )
     elif tokenizer_type == "wordpiece":
         if language == "ja":
@@ -332,7 +338,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--spm_split_by_whitespace",
         action="store_true",
-        help="If enabled, (only for sentencepiece) ",
+        help="If enabled, use a white space to split sentence pieces (only for sentencepiece)",
+    )
+    parser.add_argument(
+        "--spm_pretokenize_boundary_constraint",
+        action="store_true",
+        help="If enabled, train the model with pre-tokenization boundary constraints (only for sentencepiece)",
     )
     parser.add_argument(
         "--vocab_size", type=int, default=32768, help="The number of vocabulary."
@@ -420,6 +431,24 @@ if __name__ == "__main__":
             "spacy-luw must be used with num_files==1, so changed num_files to 1"
         )
         args.num_files = 1
+    if (
+        args.tokenizer_type != "sentencepiece"
+        and args.spm_pretokenize_boundary_constraint
+    ):
+        logger.warning(
+            f"spm_pretokenize_boundary_constraint is not available with {args.tokenizer_type}.\n"
+            "spm_pretokenize_boundary_constraint is disabled"
+        )
+        args.spm_pretokenize_boundary_constraint = False
+    if args.spm_split_by_whitespace and args.spm_pretokenize_boundary_constraint:
+        raise ValueError(
+            "spm_split_by_whitespace and spm_pretokenize_boundary_constraint must not be specified at the same time"
+        )
+    delimiter: str
+    if args.spm_pretokenize_boundary_constraint:
+        delimiter = "||||"
+    else:
+        delimiter = " "
 
     use_tqdm: bool = not args.disable_tqdm
     input_file_or_dir: str
@@ -445,6 +474,7 @@ if __name__ == "__main__":
             sudachi_dict_type=args.sudachi_dict_type,
             use_tqdm=use_tqdm,
             ignore_max_byte_error=args.ignore_max_byte_error,
+            delimiter=delimiter,
         )
     else:
         input_file_or_dir = args.input_file
@@ -459,5 +489,5 @@ if __name__ == "__main__":
         tokenizer_type=args.tokenizer_type,
         language=args.language,
         spm_split_by_whitespace=args.spm_split_by_whitespace,
-        spm_add_dummy_prefix=not args.spm_disable_add_dummy_prefix,
+        spm_delimiter=delimiter,
     )

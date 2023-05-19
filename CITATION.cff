@@ -1,0 +1,39 @@
+cff-version: 1.0.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Suzuki"
+  given-names: "Masahiro"
+  orcid: "https://orcid.org/0000-0001-8519-5617"
+- family-names: "Sakaji"
+  given-names: "Hiroki"
+  orcid: "https://orcid.org/0000-0001-5030-625X"
+- family-names: "Hirano"
+  given-names: "Masanori"
+  orcid: "https://orcid.org/0000-0001-5883-8250"
+- family-names: "Izumi"
+  given-names: "Kiyoshi"
+title: "Pre-training Language Models for Japanese"
+version: 2.2.1
+date-released: 2023-04-28
+url: "https://github.com/retarfi/language-pretraining"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Suzuki"
+    given-names: "Masahiro"
+    orcid: "https://orcid.org/0000-0001-8519-5617"
+  - family-names: "Sakaji"
+    given-names: "Hiroki"
+    orcid: "https://orcid.org/0000-0001-5030-625X"
+  - family-names: "Hirano"
+    given-names: "Masanori"
+    orcid: "https://orcid.org/0000-0001-5883-8250"
+  - family-names: "Izumi"
+    given-names: "Kiyoshi"
+  doi: "10.1016/j.ipm.2022.103194"
+  journal: "Information Processing & Management"
+  month: 3
+  title: "Constructing and analyzing domain-specific language model for financial text mining"
+  volume: 60
+  number: 2
+  year: 2023
