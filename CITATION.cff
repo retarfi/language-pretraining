@@ -31,7 +31,7 @@ preferred-citation:
   - family-names: "Izumi"
     given-names: "Kiyoshi"
   doi: "10.1016/j.ipm.2022.103194"
-  journal: "Information Processing \& Management"
+  journal: "Information Processing & Management"
   month: 3
   title: "Constructing and analyzing domain-specific language model for financial text mining"
   volume: 60
