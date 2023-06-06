@@ -113,7 +113,7 @@ def mp_tokenize(
                         pass
                 else:
                     outfile.write(
-                        " ".join(main_tokenizer.tokenize(line.strip())) + "\n"
+                        delimiter.join(main_tokenizer.tokenize(line.strip())) + "\n"
                     )
             if num_file == 0 and use_tqdm:
                 pbar.update(1)
@@ -490,4 +490,5 @@ if __name__ == "__main__":
         language=args.language,
         spm_split_by_whitespace=args.spm_split_by_whitespace,
         spm_delimiter=delimiter,
+        spm_add_dummy_prefix=not args.spm_disable_add_dummy_prefix,
     )
