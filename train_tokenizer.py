@@ -488,6 +488,7 @@ if __name__ == "__main__":
         num_unused_tokens=args.num_unused_tokens,
         tokenizer_type=args.tokenizer_type,
         language=args.language,
+        spm_model_type=args.spm_model_type,
         spm_split_by_whitespace=args.spm_split_by_whitespace,
         spm_delimiter=delimiter,
         spm_add_dummy_prefix=not args.spm_disable_add_dummy_prefix,
