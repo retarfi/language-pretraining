@@ -118,7 +118,7 @@ def convert_sentence_to_ids(
 ) -> Dataset:
     if "_tokenizer" not in globals():
         global _tokenizer
-        _tokenizer = tokenizer
+    _tokenizer = tokenizer
     ds = ds.map(
         lambda example: _sentence_to_ids_global_tokenizer(example, batched=False),
         remove_columns=["sentence"],
@@ -341,7 +341,7 @@ def create_examples_from_document(
             dataset_type = "linebyline"
     if "_tokenizer" not in globals():
         global _tokenizer
-        _tokenizer = tokenizer
+    _tokenizer = tokenizer
     if dataset_type == "linebyline":
         ds = ds.map(
             lambda example: _create_examples_from_document_for_linebyline_global_tokenizer(
