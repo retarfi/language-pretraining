@@ -1,4 +1,11 @@
-from transformers.models.deberta_v2.modeling_deberta_v2 import *
+from typing import Optional, Tuple, Union
+
+import torch
+import torch.utils.checkpoint
+from torch import nn
+from transformers.modeling_outputs import BaseModelOutput
+from transformers.models.deberta_v2.modeling_deberta_v2 import DebertaV2Model, DebertaV2ForMaskedLM, DebertaV2OnlyMLMHead
+
 
 # Integrated DeBERTaV2 with EMD
 class DebertaV2EmdModel(DebertaV2Model):
